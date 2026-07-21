@@ -32,3 +32,20 @@ pipeline {
 env.NODE_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.build | cut -c1-12', returnStdout: true).trim()
 buildAndPushIfChanged(env.NODE_IMAGE, env.NODE_IMAGE_TAG, 'Dockerfile.build', 'Node')
 ```
+
+### `withNodeBuilder`
+Запускает переданный блок кода (Closure) внутри изолированного Docker-контейнера сборщика (Node.js). 
+Автоматически пробрасывает кэш для npm (через volume `NPM_CACHE_VOLUME`) и запускает контейнер от root для избежания проблем с правами на примонтированные директории.
+
+**Ожидает переменные окружения:**
+* `env.NODE_IMAGE` - базовое имя образа сборщика
+* `env.NODE_IMAGE_TAG` - тег образа сборщика
+* `env.NPM_CACHE_VOLUME` - имя Docker volume для кэширования npm
+
+**Пример использования:**
+```groovy
+withNodeBuilder {
+    sh 'npm ci --ignore-scripts'
+    sh 'npm run build:web'
+}
+```
