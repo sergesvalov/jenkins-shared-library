@@ -121,3 +121,104 @@ deployDockerCompose(
     composeFile: 'compose.yml'
 )
 ```
+
+### `buildCapacitorAndroid`
+Выполняет полный цикл сборки Android APK для Capacitor-проектов (Vite-билд, инициализация, фикс `aapt2` для arm64, Gradle-компиляция и подпись). Обернуто в `withAndroidBuilder`.
+
+**Параметры:**
+* `buildScript` - Скрипт сборки веб-части (по умолчанию `npm run build:cap`)
+* `keystore` - Путь к хранилищу ключей (по умолчанию `keystore/release.keystore`)
+* `storepass` - Пароль хранилища
+* `keyalias` - Алиас ключа
+* `keypass` - Пароль ключа
+
+**Пример использования:**
+```groovy
+buildCapacitorAndroid(
+    buildScript: 'VITE_MODE=capacitor npm run build:cap',
+    keystore: 'keystore/release.keystore',
+    storepass: 'password',
+    keyalias: 'release',
+    keypass: 'password'
+)
+```
+
+## Как строить пайплайны с этой библиотекой
+
+Использование разделяемой библиотеки позволяет сделать ваши `Jenkinsfile` короткими, декларативными и сфокусированными только на логике конкретного проекта, пряча всю "грязную" работу (Docker-контейнеры, кэши, хаки сборщиков) под капот.
+
+### Базовый шаблон пайплайна
+
+Вот типичный скелет того, как рекомендуется выстраивать этапы сборки:
+
+```groovy
+@Library('mylib@main') _
+
+pipeline {
+    agent { label 'built-in' }
+    
+    options {
+        skipDefaultCheckout()
+    }
+    
+    environment {
+        REGISTRY_IP = '192.168.0.222'
+        // ... другие переменные
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                // Очистка рабочих директорий
+            }
+        }
+        
+        stage('Build Toolchain') {
+            steps {
+                // Используем buildAndPushIfChanged, чтобы не пересобирать
+                // тяжелые образы (Node, Android), если их Dockerfile не изменился
+            }
+        }
+        
+        stage('Dependencies & Tests') {
+            steps {
+                // Оборачиваем шаги в withNodeBuilder для работы в изолированном
+                // Node-окружении с кэшированием npm
+                withNodeBuilder {
+                    sh 'npm ci'
+                    sh 'npm run test'
+                }
+            }
+        }
+        
+        stage('Build Web & Deploy') {
+            steps {
+                // Сборка статики
+                withNodeBuilder {
+                    sh 'npm run build:web'
+                }
+                
+                // Деплой через ssh+docker-compose с помощью готового шага
+                deployDockerCompose(...)
+            }
+        }
+        
+        stage('Build Mobile') {
+            steps {
+                // Вызов высокоуровневого шага, который делает всё: Vite, Capacitor, Gradle, Zipalign, Apksigner
+                buildCapacitorAndroid(...)
+                
+                // Сохранение артефактов
+                archiveArtifacts artifacts: '**/*.apk'
+            }
+        }
+    }
+}
+```
+
+### Главные принципы
+1. **Изоляция сборок**: Никогда не собирайте проекты прямо на хосте Jenkins. Всегда используйте `withNodeBuilder` или `withAndroidBuilder`. Это гарантирует, что сборка не зависит от того, что установлено на сервере.
+2. **Кэширование**: Обертки `with*Builder` автоматически подключают именованные тома (`NPM_CACHE_VOLUME` и `GRADLE_CACHE_VOLUME`). Это ускоряет сборку в десятки раз по сравнению с чистой загрузкой пакетов при каждом запуске.
+3. **Безопасность**: Скрывайте учетные данные. Передавайте только ID кредов (как в `deployDockerCompose`) или пути к защищенным файлам (`buildCapacitorAndroid`).
+4. **DRY (Don't Repeat Yourself)**: Если вы видите, что один и тот же bash-скрипт из 5-10 строк кочует из проекта в проект (как это было с хаком `aapt2` для arm64), выносите его в файл `vars/stepName.groovy` в эту библиотеку.
