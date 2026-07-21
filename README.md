@@ -68,3 +68,29 @@ withAndroidBuilder {
     sh 'cd android && ./gradlew assembleRelease'
 }
 ```
+
+### `signAndroidApk`
+Выравнивает (zipalign) и подписывает (apksigner) Android APK. Принимает параметры в виде Map.
+Может использоваться в любых пайплайнах, собирающих Android-приложения.
+
+**Параметры:**
+* `unsignedApk` - Путь к исходному неподписанному APK (обязательный)
+* `signedApk` - Путь, по которому будет сохранен подписанный APK (обязательный)
+* `keystore` - Путь к файлу хранилища ключей (.keystore/.jks) (обязательный)
+* `storepass` - Пароль от хранилища (обязательный)
+* `keyalias` - Алиас ключа (обязательный)
+* `keypass` - Пароль от ключа (обязательный)
+* `buildTools` - Версия build-tools (по умолчанию `35.0.0`)
+* `zipalign` - Путь к zipalign (по умолчанию `/usr/local/bin/zipalign`)
+
+**Пример использования:**
+```groovy
+signAndroidApk(
+    unsignedApk: 'android/app/build/outputs/apk/release/app-release-unsigned.apk',
+    signedApk:   'android/app/build/outputs/apk/release/app-release.apk',
+    keystore:    'keystore/release.keystore',
+    storepass:   'password',
+    keyalias:    'release',
+    keypass:     'password'
+)
+```
