@@ -97,4 +97,27 @@ signAndroidApk(
     keyalias:    'release',
     keypass:     'password'
 )
+)
+```
+
+### `deployDockerCompose`
+Деплоит приложение через Docker Compose на удаленный сервер по SSH, используя плагин `sshagent`.
+Предварительно создает директорию на сервере, копирует туда compose-файл и запускает `docker compose up`.
+
+**Параметры:**
+* `credentialsId` - ID SSH-ключа (credentials) в Jenkins (обязательный)
+* `user` - Пользователь для подключения по SSH (обязательный)
+* `host` - IP или доменное имя сервера (обязательный)
+* `dir` - Директория на сервере, куда будет скопирован compose-файл и где будет запущен docker compose (обязательный)
+* `composeFile` - Путь к локальному compose-файлу, который нужно отправить на сервер (обязательный)
+
+**Пример использования:**
+```groovy
+deployDockerCompose(
+    credentialsId: 'my-ssh-key',
+    user: 'deploy',
+    host: '192.168.1.10',
+    dir: '/opt/myapp',
+    composeFile: 'compose.yml'
+)
 ```
