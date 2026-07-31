@@ -102,7 +102,7 @@ signAndroidApk(
 
 ### `deployDockerCompose`
 Деплоит приложение через Docker Compose на удаленный сервер по SSH, используя плагин `sshagent`.
-Предварительно создает директорию на сервере, копирует туда compose-файл и запускает `docker compose up`.
+Предварительно создает директорию на сервере, копирует туда compose-файл и запускает `docker compose up`. Если передана мапа `envVars`, автоматически генерирует и копирует файл `.env` на сервер.
 
 **Параметры:**
 * `credentialsId` - ID SSH-ключа (credentials) в Jenkins (обязательный)
@@ -110,6 +110,7 @@ signAndroidApk(
 * `host` - IP или доменное имя сервера (обязательный)
 * `dir` - Директория на сервере, куда будет скопирован compose-файл и где будет запущен docker compose (обязательный)
 * `composeFile` - Путь к локальному compose-файлу, который нужно отправить на сервер (обязательный)
+* `envVars` - (Map) Переменные окружения, которые будут записаны в `.env` файл на сервере (опционально)
 
 **Пример использования:**
 ```groovy
@@ -118,7 +119,10 @@ deployDockerCompose(
     user: 'deploy',
     host: '192.168.1.10',
     dir: '/opt/myapp',
-    composeFile: 'compose.yml'
+    composeFile: 'compose.yml',
+    envVars: [
+        'DOCKER_IMAGE': '192.168.1.11:5050/myapp:latest'
+    ]
 )
 ```
 
@@ -141,6 +145,78 @@ buildCapacitorAndroid(
     keyalias: 'release',
     keypass: 'password'
 )
+```
+
+### `buildAndPushDockerImage`
+Собирает и сразу пушит Docker-образ в реестр (включая тег `latest`). Упрощает стандартный флоу работы с Docker.
+
+**Параметры:**
+* `imageName` - Имя образа (обязательный)
+* `tag` - Тег образа (по умолчанию `env.BUILD_NUMBER`)
+* `context` - Контекст сборки (по умолчанию `.`)
+* `extraArgs` - Дополнительные аргументы для `docker build` (опционально)
+
+**Пример использования:**
+```groovy
+buildAndPushDockerImage(imageName: '192.168.0.222:5050/myapp', tag: 'v1.0.0')
+```
+
+### `cleanLocalDockerImages`
+Удаляет локальные копии Docker-образов, чтобы освободить место на Jenkins-агенте. Вызывает `docker rmi`, игнорируя ошибки.
+
+**Параметры:**
+* `imageName` - Имя образа (обязательный)
+* `tag` - Тег образа (опционально)
+
+**Пример использования (обычно в блоке post { always { ... } }):**
+```groovy
+cleanLocalDockerImages(imageName: '192.168.0.222:5050/myapp', tag: 'v1.0.0')
+```
+
+### `remoteDockerLogs`
+Подключается к удаленному серверу по SSH и выводит последние логи указанного Docker-контейнера. Отлично подходит для шагов Health Check.
+
+**Параметры:**
+* `containerName` - Имя контейнера (обязательный)
+* `host` - IP сервера (обязательный)
+* `user` - Пользователь SSH (обязательный)
+* `credentialsId` - ID SSH-ключа (обязательный)
+* `lines` - Количество строк лога (по умолчанию 30)
+
+**Пример использования:**
+```groovy
+remoteDockerLogs(
+    containerName: 'my-bot',
+    host: '192.168.0.223',
+    user: 'deploy',
+    credentialsId: 'my-ssh-key',
+    lines: 50
+)
+```
+
+### `checkHttpEndpoint`
+Отправляет HTTP GET запрос (через `curl` с агента) для проверки доступности сервиса. Делает несколько попыток с задержкой.
+
+**Параметры:**
+* `url` - Полный URL для проверки (обязательный)
+* `retries` - Количество попыток (по умолчанию 3)
+* `sleepTime` - Задержка между попытками в секундах (по умолчанию 5)
+
+**Пример использования:**
+```groovy
+checkHttpEndpoint(url: 'http://192.168.0.223:8000/api/health')
+```
+
+### `fixWorkspacePermissions`
+Сбрасывает права файлов в текущем Workspace на пользователя, от имени которого работает Jenkins-агент. Незаменим, если вы запускаете тесты или инструменты (playwright, pytest) в Docker-контейнерах, которые создают файлы от имени пользователя `root` (что может вызывать ошибку "Permission denied" при очистке рабочего пространства).
+
+**Пример использования:**
+```groovy
+post {
+    always {
+        fixWorkspacePermissions()
+    }
+}
 ```
 
 ## Как строить пайплайны с этой библиотекой
