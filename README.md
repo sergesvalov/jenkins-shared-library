@@ -305,37 +305,43 @@ pipeline {
 
 Новый стандарт требует минимизации `Jenkinsfile` в проектах и выноса логики в универсальный шаг `declarativePipeline()`. Конфигурация выносится в файл `pipeline-config.yaml` в корне проекта.
 
-Пример `Jenkinsfile`:
+Пример `Jenkinsfile` (вызов):
 ```groovy
 @Library('mylib@main') _
 declarativePipeline(agent: 'built-in')
 ```
-*(Параметр `agent` является обязательным, вы можете указать любой лейбл агента, например `agent: 'my-custom-node'`)*
+*(Параметр `agent` является обязательным, вы можете указать любой доступный лейбл Jenkins-узла, например `agent: 'my-custom-node'`)*
 
-Пример `pipeline-config.yaml` для бэкенда (`stack_type: "docker-compose"`):
+#### Пример конфигурации `pipeline-config.yaml` для бэкенда (`stack_type: "docker-compose"`)
+Складывается в корневой директории вашего проекта.
 ```yaml
-service_name: "myassistant"
+service_name: "myapp"
 stack_type: "docker-compose"
 target_cluster: "prod"
 ports:
-  host: 85
-  internal: 8000
+  host: 85       # Порт, который будет проброшен наружу
+  internal: 8000 # Внутренний порт приложения
 containers:
-  - "garmin-stats-assistant"
+  - "myapp-backend"
 ```
 
-Пример `pipeline-config.yaml` для мобильного/веб проекта (`stack_type: "capacitor"`):
+#### Пример конфигурации `pipeline-config.yaml` для мобильного/веб проекта (`stack_type: "capacitor"`)
+Складывается в корневой директории вашего проекта.
 ```yaml
-service_name: "itdefence"
+service_name: "my-hybrid-app"
 stack_type: "capacitor"
 target_cluster: "prod"
 deploy:
-  host: "192.168.0.222"
-  dir: "/opt/itdefence"
+  # IP-адрес или домен целевого сервера для деплоя
+  # (Реальный адрес здесь скрыт в целях безопасности)
+  host: "<IP-АДРЕС_СЕРВЕРА>"
+  dir: "/opt/myapp"
   web_port: 7979
 features:
   - typecheck
   - tests
   - e2e
 ```
-*Обратите внимание: никаких паролей и секретов в yaml нет. Учетные данные Jenkins берет из своих Credentials (`SSH_CREDS_ID`, и т.д.).*
+
+**О безопасности данных:**
+*В конфигурационном файле `pipeline-config.yaml` не должно быть никаких секретных ключей, паролей, или учетных данных (credentials). Учетные данные и ключи для доступа к серверам или сертификатам Android подтягиваются Jenkins автоматически из защищенного хранилища (Jenkins Credentials) через глобальные переменные (например, `SSH_CREDS_ID`, `SERVER_USER`). Файл конфигурации содержит только общую структуру деплоя.*
