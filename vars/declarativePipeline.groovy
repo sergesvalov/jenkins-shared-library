@@ -3,36 +3,175 @@ def call(Map params = [:]) {
         error("You must specify an agent parameter, e.g., declarativePipeline(agent: 'built-in')")
     }
     def buildAgent = params.agent
-    
+    def config = null
+    def gitCommit = ''
+
+    // Выделяем временный узел для быстрого чтения конфигурации
+    node(buildAgent) {
+        checkout scm
+        config = readYaml file: 'pipeline-config.yaml'
+        gitCommit = sh(script: 'git rev-parse HEAD || echo "local"', returnStdout: true).trim()
+    }
+
+    if (config.stack_type == 'docker-compose') {
+        runDockerComposePipeline(buildAgent, config, gitCommit, params)
+    } else if (config.stack_type == 'capacitor' || config.stack_type == 'node') {
+        runCapacitorPipeline(buildAgent, config, gitCommit, params)
+    } else {
+        error("Unsupported stack_type: ${config.stack_type}")
+    }
+}
+
+def runDockerComposePipeline(String buildAgent, Map config, String gitCommit, Map params) {
     pipeline {
         agent { label "${buildAgent}" }
         options {
             skipDefaultCheckout()
         }
+        parameters {
+            booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Deploy even if not main branch')
+        }
+        stages {
+            stage('Source Checkout & Setup') {
+                steps {
+                    script {
+                        checkout scm
+                        
+                        env.SERVICE_NAME = config.service_name
+                        env.STACK_TYPE = config.stack_type
+                        env.DEPLOY_SERVER_IP = config.target_cluster == 'prod' ? env.PROD_SERVER_IP : (env.STAGING_SERVER_IP ?: '127.0.0.1')
+                        env.REGISTRY_IP = env.REGISTRY_IP ?: '127.0.0.1'
+                        env.SSH_CREDS_ID = env.SERVER_USER
+                        env.SERVER_USER = env.SERVER_USER
+                        env.DOCKER_IMAGE = "${env.REGISTRY_IP}:5050/${config.service_name}"
+                        env.BUILD_TAG = "${env.BUILD_NUMBER}-${gitCommit.take(7)}"
+                        env.HOST_PORT = config.ports?.host ? config.ports.host.toString() : ""
+                        
+                        if (config.deploy) {
+                            env.DEPLOY_TARGET_HOST = config.deploy.host ?: env.DEPLOY_SERVER_IP
+                            env.DEPLOY_TARGET_DIR = config.deploy.dir ?: "~/${config.service_name}"
+                        } else {
+                            env.DEPLOY_TARGET_HOST = env.DEPLOY_SERVER_IP
+                            env.DEPLOY_TARGET_DIR = "~/${env.SERVICE_NAME}"
+                        }
+                        
+                        env.CONTAINERS = (config.containers ?: []).join(' ')
+                    }
+                }
+            }
 
+            stage('Build & Push Image') {
+                steps {
+                    script {
+                        buildAndPushDockerImage(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
+                        stash name: 'compose', includes: 'docker-compose.yml'
+                    }
+                }
+            }
+
+            stage('Deploy') {
+                when {
+                    anyOf {
+                        branch 'main'
+                        expression { return params.FORCE_DEPLOY }
+                    }
+                }
+                steps {
+                    script {
+                        echo "🚀 Docker-деплой на ${env.DEPLOY_TARGET_HOST} ..."
+                        unstash 'compose'
+                        
+                        if (env.CONTAINERS) {
+                            sshagent(credentials: [env.SSH_CREDS_ID]) {
+                                sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'docker rm -f ${env.CONTAINERS} 2>/dev/null || true'"
+                            }
+                        }
+                        
+                        deployDockerCompose(
+                            credentialsId: env.SSH_CREDS_ID,
+                            user: env.SERVER_USER,
+                            host: env.DEPLOY_TARGET_HOST,
+                            dir: env.DEPLOY_TARGET_DIR,
+                            composeFile: 'docker-compose.yml',
+                            envVars: [
+                                'DOCKER_IMAGE': env.DOCKER_IMAGE
+                            ]
+                        )
+                    }
+                }
+            }
+
+            stage('Health Check') {
+                steps {
+                    script {
+                        if (env.HOST_PORT) {
+                            echo "Verifying application availability..."
+                            try {
+                                checkHttpEndpoint(url: "http://${env.DEPLOY_TARGET_HOST}:${env.HOST_PORT}/api/health", retries: 5, sleepTime: 5)
+                            } catch (Exception e) {
+                                echo "Warning: API might not be ready. Error: ${e.message}"
+                            }
+                        }
+                        
+                        def containersList = env.CONTAINERS.split(' ')
+                        for (String containerName : containersList) {
+                            if (containerName.trim()) {
+                                echo "Checking logs for ${containerName}..."
+                                remoteDockerLogs(
+                                    containerName: containerName,
+                                    host: env.DEPLOY_TARGET_HOST,
+                                    user: env.SERVER_USER,
+                                    credentialsId: env.SSH_CREDS_ID,
+                                    lines: 30
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        post {
+            always {
+                script {
+                    if (env.DOCKER_IMAGE && env.BUILD_TAG) {
+                        cleanLocalDockerImages(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
+                    }
+                }
+            }
+            success {
+                echo "✅ ${env.SERVICE_NAME} успешно собран! Build: ${env.BUILD_TAG}"
+            }
+            failure {
+                echo "❌ ${env.SERVICE_NAME}: сборка упала."
+            }
+        }
+    }
+}
+
+def runCapacitorPipeline(String buildAgent, Map config, String gitCommit, Map params) {
+    pipeline {
+        agent { label "${buildAgent}" }
+        options {
+            skipDefaultCheckout()
+        }
         parameters {
             booleanParam(name: 'SKIP_TYPECHECK',       defaultValue: false, description: 'Skip TypeScript check (if applicable)')
             booleanParam(name: 'BUILD_WEB',             defaultValue: true,  description: 'Build web version and deploy')
             booleanParam(name: 'BUILD_ANDROID',         defaultValue: true,  description: 'Build Android .apk (if applicable)')
             booleanParam(name: 'FORCE_DEPLOY',          defaultValue: false, description: 'Deploy web even if not main branch')
-            booleanParam(name: 'FORCE_REBUILD_IMAGES',  defaultValue: false, description: 'Rebuild toolchain images (Node/Android) even if Dockerfile unchanged')
+            booleanParam(name: 'FORCE_REBUILD_IMAGES',  defaultValue: false, description: 'Rebuild toolchain images even if Dockerfile unchanged')
         }
-
         stages {
-            stage('Source Checkout & Config') {
+            stage('Source Checkout & Setup') {
                 steps {
                     script {
                         // Clean up root files that might have been left by previous runs
                         sh 'docker run --rm -v $(pwd):/workspace alpine chown -R $(id -u):$(id -g) /workspace || true'
                         
-                        echo "Checking out source code..."
                         checkout scm
                         
-                        // Deep cleanup for workspace (especially for capacitor projects)
+                        // Deep cleanup for workspace
                         sh 'docker run --rm -u root -v "$WORKSPACE:$WORKSPACE" -w "$WORKSPACE" node:22-bookworm-slim rm -rf dist release android playwright-report test-results || true'
-                        
-                        echo "Reading pipeline-config.yaml..."
-                        def config = readYaml file: 'pipeline-config.yaml'
                         
                         env.SERVICE_NAME = config.service_name
                         env.STACK_TYPE = config.stack_type
@@ -43,12 +182,9 @@ def call(Map params = [:]) {
                         env.HAS_FEATURE_E2E = featuresList.contains('e2e') ? 'true' : 'false'
                         
                         env.DEPLOY_SERVER_IP = config.target_cluster == 'prod' ? env.PROD_SERVER_IP : (env.STAGING_SERVER_IP ?: '127.0.0.1')
-                        
                         env.REGISTRY_IP = env.REGISTRY_IP ?: '127.0.0.1'
                         env.SSH_CREDS_ID = env.SERVER_USER
                         env.SERVER_USER = env.SERVER_USER
-                        
-                        env.DOCKER_IMAGE = "${env.REGISTRY_IP}:5050/${config.service_name}"
                         
                         env.NODE_IMAGE = "${env.REGISTRY_IP}:5050/${config.service_name}-builder"
                         env.ANDROID_IMAGE = "${env.REGISTRY_IP}:5050/${config.service_name}-android"
@@ -56,28 +192,18 @@ def call(Map params = [:]) {
                         
                         env.NPM_CACHE_VOLUME = "${config.service_name}-npm-cache"
                         env.GRADLE_CACHE_VOLUME = "${config.service_name}-gradle-cache"
-                        
-                        env.BUILD_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'local'}"
-                        
-                        env.HOST_PORT = config.ports?.host ? config.ports.host.toString() : ""
+                        env.BUILD_TAG = "${env.BUILD_NUMBER}-${gitCommit.take(7)}"
                         
                         if (config.deploy) {
                             env.DEPLOY_TARGET_HOST = config.deploy.host ?: env.DEPLOY_SERVER_IP
                             env.DEPLOY_TARGET_DIR = config.deploy.dir ?: "~/${config.service_name}"
                             env.DEPLOY_TARGET_PORT = config.deploy.web_port ? config.deploy.web_port.toString() : ""
-                        } else {
-                            env.DEPLOY_TARGET_HOST = env.DEPLOY_SERVER_IP
-                            env.DEPLOY_TARGET_DIR = "~/${env.SERVICE_NAME}"
-                            env.DEPLOY_TARGET_PORT = env.HOST_PORT
                         }
-                        
-                        env.CONTAINERS = (config.containers ?: []).join(' ')
                     }
                 }
             }
 
             stage('Build Toolchain Images') {
-                when { expression { return env.STACK_TYPE == 'capacitor' || env.STACK_TYPE == 'node' } }
                 steps {
                     script {
                         env.NODE_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.build | cut -c1-12', returnStdout: true).trim()
@@ -87,7 +213,7 @@ def call(Map params = [:]) {
                             buildAndPushIfChanged(env.NODE_IMAGE, env.NODE_IMAGE_TAG, 'Dockerfile.build', 'Node')
                         }
 
-                        if (params.BUILD_ANDROID && env.STACK_TYPE == 'capacitor') {
+                        if (params.BUILD_ANDROID) {
                             env.ANDROID_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.android | cut -c1-12', returnStdout: true).trim()
                             if (params.FORCE_REBUILD_IMAGES) {
                                 buildAndPushDockerImage(imageName: env.ANDROID_IMAGE, tag: env.ANDROID_IMAGE_TAG, context: '.', extraArgs: '-f Dockerfile.android')
@@ -100,7 +226,6 @@ def call(Map params = [:]) {
             }
 
             stage('Install Dependencies') {
-                when { expression { return env.STACK_TYPE == 'capacitor' || env.STACK_TYPE == 'node' } }
                 steps {
                     script {
                         echo "📦 npm ci в workspace..."
@@ -152,7 +277,7 @@ def call(Map params = [:]) {
 
             stage('Build: Web (Capacitor)') {
                 when { 
-                    expression { return env.STACK_TYPE == 'capacitor' && params.BUILD_WEB } 
+                    expression { return params.BUILD_WEB } 
                 }
                 steps {
                     script {
@@ -173,7 +298,7 @@ def call(Map params = [:]) {
 
             stage('Build: Android (.apk)') {
                 when { 
-                    expression { return env.STACK_TYPE == 'capacitor' && params.BUILD_ANDROID } 
+                    expression { return params.BUILD_ANDROID } 
                 }
                 steps {
                     script {
@@ -191,105 +316,36 @@ def call(Map params = [:]) {
                 }
             }
 
-            stage('Build & Push (Docker Compose)') {
-                when { expression { return env.STACK_TYPE == 'docker-compose' } }
-                steps {
-                    script {
-                        buildAndPushDockerImage(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
-                        stash name: 'compose', includes: 'docker-compose.yml'
-                    }
-                }
-            }
-
             stage('Deploy') {
                 when {
                     anyOf {
                         branch 'main'
                         expression { return params.FORCE_DEPLOY }
-                        expression { return env.STACK_TYPE == 'docker-compose' }
                     }
-                    expression { return env.STACK_TYPE == 'docker-compose' || (env.STACK_TYPE == 'capacitor' && params.BUILD_WEB) }
+                    expression { return params.BUILD_WEB }
                 }
                 steps {
                     script {
                         echo "🚀 Docker-деплой на ${env.DEPLOY_TARGET_HOST} ..."
-                        
-                        if (env.STACK_TYPE == 'docker-compose') {
-                            unstash 'compose'
-                            
-                            if (env.CONTAINERS) {
-                                sshagent(credentials: [env.SSH_CREDS_ID]) {
-                                    sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'docker rm -f ${env.CONTAINERS} 2>/dev/null || true'"
-                                }
-                            }
-                            
-                            deployDockerCompose(
-                                credentialsId: env.SSH_CREDS_ID,
-                                user: env.SERVER_USER,
-                                host: env.DEPLOY_TARGET_HOST,
-                                dir: env.DEPLOY_TARGET_DIR,
-                                composeFile: 'docker-compose.yml',
-                                envVars: [
-                                    'DOCKER_IMAGE': env.DOCKER_IMAGE
-                                ]
-                            )
-                        } else if (env.STACK_TYPE == 'capacitor') {
-                            unstash 'compose'
-                            deployDockerCompose(
-                                credentialsId: env.SSH_CREDS_ID,
-                                user: env.SERVER_USER,
-                                host: env.DEPLOY_TARGET_HOST,
-                                dir: env.DEPLOY_TARGET_DIR,
-                                composeFile: 'compose.yml'
-                            )
-                            if (env.DEPLOY_TARGET_PORT) {
-                                echo "✅ Доступно: http://${env.DEPLOY_TARGET_HOST}:${env.DEPLOY_TARGET_PORT}"
-                            }
-                        }
-                    }
-                }
-            }
-
-            stage('Health Check') {
-                when { expression { return env.STACK_TYPE == 'docker-compose' } }
-                steps {
-                    script {
-                        if (env.HOST_PORT) {
-                            echo "Verifying application availability..."
-                            try {
-                                checkHttpEndpoint(url: "http://${env.DEPLOY_TARGET_HOST}:${env.HOST_PORT}/api/health", retries: 5, sleepTime: 5)
-                            } catch (Exception e) {
-                                echo "Warning: API might not be ready. Error: ${e.message}"
-                            }
-                        }
-                        
-                        def containersList = env.CONTAINERS.split(' ')
-                        for (String containerName : containersList) {
-                            if (containerName.trim()) {
-                                echo "Checking logs for ${containerName}..."
-                                remoteDockerLogs(
-                                    containerName: containerName,
-                                    host: env.DEPLOY_TARGET_HOST,
-                                    user: env.SERVER_USER,
-                                    credentialsId: env.SSH_CREDS_ID,
-                                    lines: 30
-                                )
-                            }
+                        unstash 'compose'
+                        deployDockerCompose(
+                            credentialsId: env.SSH_CREDS_ID,
+                            user: env.SERVER_USER,
+                            host: env.DEPLOY_TARGET_HOST,
+                            dir: env.DEPLOY_TARGET_DIR,
+                            composeFile: 'compose.yml'
+                        )
+                        if (env.DEPLOY_TARGET_PORT) {
+                            echo "✅ Доступно: http://${env.DEPLOY_TARGET_HOST}:${env.DEPLOY_TARGET_PORT}"
                         }
                     }
                 }
             }
         }
-
         post {
             always {
                 script {
-                    if (env.STACK_TYPE == 'docker-compose' && env.DOCKER_IMAGE && env.BUILD_TAG) {
-                        cleanLocalDockerImages(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
-                    }
-                    if (env.STACK_TYPE == 'capacitor') {
-                        sh 'docker image prune -f || true'
-                    }
+                    sh 'docker image prune -f || true'
                     sh "docker run --rm -v \$(pwd):/workspace alpine chown -R \$(id -u):\$(id -g) /workspace || true"
                 }
             }
