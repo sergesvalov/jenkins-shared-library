@@ -140,7 +140,7 @@ if (configObj.stack_type === 'capacitor' || configObj.stack_type === 'node') {
         name: 'Test',
         body: `        stage('Test') {
             when { 
-                expression { return env.HAS_FEATURE_TESTS == 'true' || env.HAS_FEATURE_E2E == 'true' } 
+                expression { return (env.HAS_FEATURE_TESTS == 'true' || env.HAS_FEATURE_E2E == 'true') && !params.SKIP_TESTS } 
             }
             steps {
                 script {
@@ -283,6 +283,7 @@ pipeline {
     }
     parameters {
         booleanParam(name: 'SKIP_TYPECHECK',       defaultValue: false, description: 'Skip TypeScript check (if applicable)')
+        booleanParam(name: 'SKIP_TESTS',           defaultValue: false, description: 'Skip all tests (Unit and E2E)')
         booleanParam(name: 'BUILD_WEB',             defaultValue: true,  description: 'Build web version and deploy')
         booleanParam(name: 'BUILD_ANDROID',         defaultValue: true,  description: 'Build Android .apk (if applicable)')
         booleanParam(name: 'FORCE_DEPLOY',          defaultValue: false, description: 'Deploy web even if not main branch')
