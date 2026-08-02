@@ -4,6 +4,7 @@ def call(Map config = [:]) {
     def storepass = config.storepass ?: 'password'
     def keyalias = config.keyalias ?: 'release'
     def keypass = config.keypass ?: 'password'
+    def generateAssets = config.generateAssets ?: false
 
     withAndroidBuilder {
         // 1. Сборка веб-части для мобилки
@@ -11,6 +12,10 @@ def call(Map config = [:]) {
 
         // 2. Инициализация платформы
         sh "npx cap add android || npx cap sync android"
+        
+        if (generateAssets) {
+            sh "npx @capacitor/assets generate --android"
+        }
 
         // AGP тянет свой aapt2 с Maven (только x86_64) независимо
         // от SDK build-tools — на arm64 падает с "Syntax error:
