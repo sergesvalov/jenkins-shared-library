@@ -87,26 +87,20 @@ def call(Map args) {
                                 'REGISTRY_IP': env.REGISTRY_IP
                             ]
                         )
-                    }
-                }
-            }
-
-            stage('Run Migrations') {
-                when {
-                    expression { return config.migrations }
-                }
-                steps {
-                    script {
-                        def delay = (config.migrations instanceof Map && config.migrations.delay) ? config.migrations.delay : 20
-                        def service = (config.migrations instanceof Map && config.migrations.service) ? config.migrations.service : 'backend'
-                        def composeFile = (config.migrations instanceof Map && config.migrations.composeFile) ? config.migrations.composeFile : 'docker-compose.yml'
                         
-                        echo "Waiting ${delay}s for DB to be ready..."
-                        sleep time: delay, unit: 'SECONDS'
-                        
-                        sshagent(credentials: [env.SSH_CREDS_ID]) {
-                            sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'cd ${env.DEPLOY_TARGET_DIR} && docker compose -f ${composeFile} logs ${service}'"
-                            sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'cd ${env.DEPLOY_TARGET_DIR} && docker compose -f ${composeFile} exec -T ${service} alembic upgrade head'"
+                        if (config.migrations) {
+                            def delay = (config.migrations instanceof Map && config.migrations.delay) ? config.migrations.delay : 20
+                            def service = (config.migrations instanceof Map && config.migrations.service) ? config.migrations.service : 'backend'
+                            def composeFile = (config.migrations instanceof Map && config.migrations.composeFile) ? config.migrations.composeFile : 'docker-compose.yml'
+                            
+                            echo "Running Database Migrations..."
+                            echo "Waiting ${delay}s for DB to be ready..."
+                            sleep time: delay, unit: 'SECONDS'
+                            
+                            sshagent(credentials: [env.SSH_CREDS_ID]) {
+                                sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'cd ${env.DEPLOY_TARGET_DIR} && docker compose -f ${composeFile} logs ${service}'"
+                                sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'cd ${env.DEPLOY_TARGET_DIR} && docker compose -f ${composeFile} exec -T ${service} alembic upgrade head'"
+                            }
                         }
                     }
                 }
