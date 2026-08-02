@@ -5,20 +5,20 @@ def call(Map config = [:]) {
     
     withNodeBuilder {
         if (buildPC) {
-            echo "Архивируем ПК-версию..."
+            echo "Archiving PC build..."
             sh "cp PlayGame.bat dist/"
             sh "cd dist && zip -r ../spaceinvasion-pc.zip *"
         }
         
         if (buildMac) {
-            echo "Архивируем Mac-версию..."
+            echo "Archiving Mac build..."
             sh "cp PlayGame.command dist/"
             sh "chmod +x dist/PlayGame.command"
             sh "cd dist && zip -r ../spaceinvasion-mac.zip *"
         }
         
         if (buildTelegram) {
-            echo "Архивируем веб-сборку для Telegram бота..."
+            echo "Archiving web build for Telegram bot..."
             sh "cd dist && zip -r ../spaceinvasion-telegram.zip *"
         }
     }

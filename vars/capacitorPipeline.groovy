@@ -83,7 +83,7 @@ def call(Map args) {
             stage('Install Dependencies') {
                 steps {
                     script {
-                        echo "📦 npm ci в workspace..."
+                        echo "📦 npm ci in workspace..."
                         withNodeBuilder {
                             sh 'npm install --ignore-scripts'
                         }
@@ -97,7 +97,7 @@ def call(Map args) {
                 }
                 steps {
                     script {
-                        echo "🔍 Запуск tsc --noEmit..."
+                        echo "🔍 Running tsc --noEmit..."
                         withNodeBuilder {
                             sh './node_modules/.bin/tsc --noEmit'
                         }
@@ -112,14 +112,14 @@ def call(Map args) {
                 steps {
                     script {
                         if (env.HAS_FEATURE_TESTS == 'true') {
-                            echo "🧪 Запуск Unit-тестов (Vitest)..."
+                            echo "🧪 Running Unit tests (Vitest)..."
                             withNodeBuilder {
                                 sh 'npm run test'
                             }
                         }
 
                         if (env.HAS_FEATURE_E2E == 'true') {
-                            echo "🎭 Запуск E2E-тестов (Playwright)..."
+                            echo "🎭 Running E2E tests (Playwright)..."
                             docker.image('mcr.microsoft.com/playwright:v1.49.1-jammy').inside("-u root -v ${env.NPM_CACHE_VOLUME}:/tmp/.npm --shm-size=1gb") {
                                 sh 'npm install --ignore-scripts'
                                 sh 'npx playwright install chromium'
@@ -136,12 +136,12 @@ def call(Map args) {
                 }
                 steps {
                     script {
-                        echo "🌐 Vite web-билд..."
+                        echo "🌐 Vite web build..."
                         withNodeBuilder {
                             sh 'VITE_MODE=web npm run build:web'
                         }
                         
-                        echo "🐳 Сборка Nginx-образа с dist/ внутри..."
+                        echo "🐳 Building Nginx image with dist/ inside..."
                         sh "docker build -t ${env.WEB_IMAGE}:${env.BUILD_TAG} -t ${env.WEB_IMAGE}:latest -f Dockerfile.nginx ."
                         sh "docker push ${env.WEB_IMAGE}:${env.BUILD_TAG}"
                         sh "docker push ${env.WEB_IMAGE}:latest"
@@ -181,7 +181,7 @@ def call(Map args) {
                 }
                 steps {
                     script {
-                        echo "🚀 Docker-деплой на ${env.DEPLOY_TARGET_HOST} ..."
+                        echo "🚀 Docker deploy to ${env.DEPLOY_TARGET_HOST} ..."
                         unstash 'compose'
                         deployDockerCompose(
                             credentialsId: env.SSH_CREDS_ID,
@@ -191,7 +191,7 @@ def call(Map args) {
                             composeFile: 'compose.yml'
                         )
                         if (env.DEPLOY_TARGET_PORT) {
-                            echo "✅ Доступно: http://${env.DEPLOY_TARGET_HOST}:${env.DEPLOY_TARGET_PORT}"
+                            echo "✅ Available at: http://${env.DEPLOY_TARGET_HOST}:${env.DEPLOY_TARGET_PORT}"
                         }
                     }
                 }
@@ -205,10 +205,10 @@ def call(Map args) {
                 }
             }
             success {
-                echo "✅ ${env.SERVICE_NAME} успешно собран! Build: ${env.BUILD_TAG}"
+                echo "✅ ${env.SERVICE_NAME} built successfully! Build: ${env.BUILD_TAG}"
             }
             failure {
-                echo "❌ ${env.SERVICE_NAME}: сборка упала."
+                echo "❌ ${env.SERVICE_NAME}: build failed."
             }
         }
     }

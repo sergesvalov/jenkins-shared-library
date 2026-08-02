@@ -6,7 +6,7 @@ def call(Map params = [:]) {
     def config = null
     def gitCommit = ''
 
-    // Выделяем временный узел для быстрого чтения конфигурации
+    // Allocate temporary node for quick configuration read
     node(buildAgent) {
         checkout scm
         config = readYaml file: 'pipeline-config.yaml'

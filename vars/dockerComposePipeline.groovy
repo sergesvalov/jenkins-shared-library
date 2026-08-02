@@ -66,7 +66,7 @@ def call(Map args) {
                 }
                 steps {
                     script {
-                        echo "🚀 Docker-деплой на ${env.DEPLOY_TARGET_HOST} ..."
+                        echo "🚀 Docker deploy to ${env.DEPLOY_TARGET_HOST} ..."
                         unstash 'compose'
                         
                         if (env.CONTAINERS) {
@@ -150,10 +150,10 @@ def call(Map args) {
                 }
             }
             success {
-                echo "✅ ${env.SERVICE_NAME} успешно собран! Build: ${env.BUILD_TAG}"
+                echo "✅ ${env.SERVICE_NAME} built successfully! Build: ${env.BUILD_TAG}"
             }
             failure {
-                echo "❌ ${env.SERVICE_NAME}: сборка упала."
+                echo "❌ ${env.SERVICE_NAME}: build failed."
             }
         }
     }

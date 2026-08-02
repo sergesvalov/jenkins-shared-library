@@ -7,25 +7,25 @@ def call(Map config = [:]) {
     def generateAssets = config.generateAssets ?: false
 
     withAndroidBuilder {
-        // 1. Сборка веб-части для мобилки
+        // 1. Build web part for mobile
         sh buildScript
 
-        // 2. Инициализация платформы
+        // 2. Initialize platform
         sh "npx cap add android || npx cap sync android"
         
         if (generateAssets) {
             sh "npx @capacitor/assets generate --android"
         }
 
-        // AGP тянет свой aapt2 с Maven (только x86_64) независимо
-        // от SDK build-tools — на arm64 падает с "Syntax error:
-        // '(' unexpected" (shell пытается исполнить x86_64 ELF).
-        // Официального arm64-билда от Google нет, поэтому
-        // подсовываем проверенный по чек-сумме arm64 aapt2 из
+        // AGP pulls its own aapt2 from Maven (x86_64 only) independent
+        // of SDK build-tools — on arm64 it fails with "Syntax error:
+        // '(' unexpected" (shell tries to execute x86_64 ELF).
+        // There is no official arm64 build from Google, so we
+        // substitute it with a checksum-verified arm64 aapt2 from
         // Dockerfile.android (Commit451/android-arm-build-tools).
         sh 'echo "android.aapt2FromMavenOverride=/usr/local/bin/aapt2" >> android/gradle.properties'
 
-        // 3. Компиляция через Gradle (с постоянным кэшем)
+        // 3. Compile via Gradle (with persistent cache)
         sh '''
             cd android
             chmod +x gradlew
