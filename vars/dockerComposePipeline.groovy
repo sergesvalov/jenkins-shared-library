@@ -93,13 +93,13 @@ def call(Map args) {
 
             stage('Run Migrations') {
                 when {
-                    expression { return config.migrations != null }
+                    expression { return config.migrations }
                 }
                 steps {
                     script {
-                        def delay = config.migrations.delay ?: 20
-                        def service = config.migrations.service ?: 'backend'
-                        def composeFile = config.migrations.composeFile ?: 'docker-compose.yml'
+                        def delay = (config.migrations instanceof Map && config.migrations.delay) ? config.migrations.delay : 20
+                        def service = (config.migrations instanceof Map && config.migrations.service) ? config.migrations.service : 'backend'
+                        def composeFile = (config.migrations instanceof Map && config.migrations.composeFile) ? config.migrations.composeFile : 'docker-compose.yml'
                         
                         echo "Waiting ${delay}s for DB to be ready..."
                         sleep time: delay, unit: 'SECONDS'
