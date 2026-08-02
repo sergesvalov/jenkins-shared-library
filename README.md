@@ -52,6 +52,25 @@ pipeline {
 
 ## Available Functions
 
+Quick summary of all functions (steps) available in the library:
+- `buildAndPushDockerImage` — Builds and pushes a Docker image to the registry.
+- `buildAndPushIfChanged` — Builds a Docker image only if it doesn't already exist.
+- `buildCapacitorAndroid` — Full Android APK build cycle for Capacitor projects.
+- `capacitorPipeline` — Standard pipeline for building Capacitor applications.
+- `checkHttpEndpoint` — Checks the availability of an HTTP endpoint.
+- `cleanLocalDockerImages` — Removes local Docker images to free up space.
+- `declarativePipeline` — Universal pipeline based on `pipeline-config.yaml`.
+- `deployDockerCompose` — Deploys an application via Docker Compose over SSH.
+- `dockerComposePipeline` — Standard pipeline for Docker Compose projects.
+- `fixWorkspacePermissions` — Resets file permissions in the Jenkins workspace.
+- `localDockerComposeDeploy` — Local deployment via Docker Compose.
+- `packageGameArtifacts` — Archives game build artifacts (PC, Mac, Web).
+- `remoteDockerLogs` — Fetches Docker container logs from a remote server.
+- `runAlembicMigrations` — Runs database migrations (Alembic) inside Docker.
+- `signAndroidApk` — Aligns (zipalign) and signs (apksigner) an Android APK.
+- `withAndroidBuilder` — Runs code inside an isolated Android builder container.
+- `withNodeBuilder` — Runs code inside an isolated Node.js builder container.
+
 ### `buildAndPushIfChanged`
 Builds and pushes a Docker image only if it does not already exist in the registry (checks via `docker pull`). Useful for optimizing the build of toolchain images when the Dockerfile changes rarely.
 

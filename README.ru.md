@@ -50,6 +50,25 @@ pipeline {
 
 ## Доступные функции
 
+Краткая сводка всех функций (steps), доступных в библиотеке:
+- `buildAndPushDockerImage` — Собирает и пушит Docker-образ в реестр.
+- `buildAndPushIfChanged` — Собирает Docker-образ, только если его еще нет в реестре.
+- `buildCapacitorAndroid` — Полный цикл сборки Android APK для Capacitor.
+- `capacitorPipeline` — Стандартный пайплайн для сборки Capacitor-приложений.
+- `checkHttpEndpoint` — Проверяет доступность HTTP-эндпоинта.
+- `cleanLocalDockerImages` — Удаляет локальные Docker-образы.
+- `declarativePipeline` — Универсальный пайплайн на базе `pipeline-config.yaml`.
+- `deployDockerCompose` — Деплой приложения через Docker Compose по SSH.
+- `dockerComposePipeline` — Стандартный пайплайн для Docker Compose проектов.
+- `fixWorkspacePermissions` — Восстанавливает права на файлы в рабочей директории.
+- `localDockerComposeDeploy` — Локальный деплой через Docker Compose.
+- `packageGameArtifacts` — Архивация артефактов игры (PC, Mac, Web).
+- `remoteDockerLogs` — Чтение логов Docker-контейнера с удаленного сервера.
+- `runAlembicMigrations` — Запуск миграций БД (Alembic) в Docker.
+- `signAndroidApk` — Выравнивание (zipalign) и подпись (apksigner) Android APK.
+- `withAndroidBuilder` — Запуск кода внутри контейнера для сборки Android.
+- `withNodeBuilder` — Запуск кода внутри Node.js-контейнера.
+
 ### `buildAndPushIfChanged`
 Собирает и пушит Docker-образ только в том случае, если он еще не существует в реестре (проверка через `docker pull`). Полезно для оптимизации сборки toolchain-образов, когда Dockerfile меняется редко.
 
