@@ -12,7 +12,7 @@ def call(Map args = [:]) {
     echo "🔍 Валидация ${configPath}..."
     
     // Запускаем внутри изолированного Node-окружения
-    withNodeBuilder {
+    docker.image('node:22-alpine').inside('-u root') {
         // Устанавливаем зависимости на лету (игнорируем ошибки отсутствия package.json)
         sh 'npm install --no-save ajv yaml diff >/dev/null 2>&1 || true'
         
