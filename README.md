@@ -16,7 +16,7 @@
 1. Зайдите в **Manage Jenkins -> System**.
 2. Найдите блок **Global Pipeline Libraries**.
 3. Добавьте новую библиотеку:
-   - **Name**: `mylib` (именно это имя используется в вызове `@Library('mylib')`).
+   - **Name**: `your-library-name` (именно это имя используется в вызове `@Library('your-library-name')`).
    - **Default version**: `main` (или ветка/тег по умолчанию).
    - Выберите **Git** (или GitHub) и укажите URL репозитория библиотеки (например, `git@github.com:sergesvalov/jenkins-shared-library.git`).
    - Укажите Credentials (SSH-ключ), у которого есть доступ на чтение этого репозитория.
@@ -25,13 +25,13 @@
 Пайплайны (в особенности `declarativePipeline`) полагаются на ряд глобальных переменных окружения и учетных данных, которые нужно задать один раз на уровне всего Jenkins.
 
 1. **Глобальные переменные** (Manage Jenkins -> System -> Global properties -> Environment variables):
-   - `SERVER_USER` — имя пользователя на целевом сервере (например, `serge`). *Важно: пайплайн ожидает, что в Jenkins созданы SSH-credentials (ключ) с ID, полностью совпадающим с этим значением!*
-   - `REGISTRY_IP` — IP-адрес или домен вашего Docker-реестра (например, `192.168.0.222`). Если не задано, fallback на `127.0.0.1`.
+   - `SERVER_USER` — имя пользователя на целевом сервере (например, `deploy_user`). *Важно: пайплайн ожидает, что в Jenkins созданы SSH-credentials (ключ) с ID, полностью совпадающим с этим значением!*
+   - `REGISTRY_IP` — IP-адрес или домен вашего Docker-реестра (например, `192.168.x.x`). Если не задано, fallback на `127.0.0.1`.
    - `PROD_SERVER_IP` (опционально) — IP-адрес продакшен сервера по умолчанию для кластера `prod`.
 
 2. **SSH Ключи** (Manage Jenkins -> Credentials):
    - Создайте **SSH Username with private key**.
-   - **ID**: должен совпадать со значением `SERVER_USER` (например, `serge`).
+   - **ID**: должен совпадать со значением `SERVER_USER` (например, `deploy_user`).
    - Вставьте приватный ключ, который имеет доступ на целевые серверы, куда будет деплоиться код.
 
 ## Как подключить
@@ -39,14 +39,14 @@
 В вашем `Jenkinsfile` добавьте импорт в самом начале файла:
 
 ```groovy
-@Library('mylib') _
+@Library('your-library-name') _
 
 pipeline {
     ...
 }
 ```
 
-*(Имя `mylib` должно быть настроено в глобальных конфигурациях вашего Jenkins: Manage Jenkins -> System -> Global Pipeline Libraries).*
+*(Имя `your-library-name` должно быть настроено в глобальных конфигурациях вашего Jenkins: Manage Jenkins -> System -> Global Pipeline Libraries).*
 
 ## Доступные функции
 
@@ -145,11 +145,11 @@ signAndroidApk(
 deployDockerCompose(
     credentialsId: 'my-ssh-key',
     user: 'deploy',
-    host: '192.168.1.10',
+    host: '192.168.x.x',
     dir: '/opt/myapp',
     composeFile: 'compose.yml',
     envVars: [
-        'DOCKER_IMAGE': '192.168.1.11:5050/myapp:latest'
+        'DOCKER_IMAGE': '192.168.x.x:5050/myapp:latest'
     ]
 )
 ```
@@ -186,7 +186,7 @@ buildCapacitorAndroid(
 
 **Пример использования:**
 ```groovy
-buildAndPushDockerImage(imageName: '192.168.0.222:5050/myapp', tag: 'v1.0.0')
+buildAndPushDockerImage(imageName: '192.168.x.x:5050/myapp', tag: 'v1.0.0')
 ```
 
 ### `cleanLocalDockerImages`
@@ -198,7 +198,7 @@ buildAndPushDockerImage(imageName: '192.168.0.222:5050/myapp', tag: 'v1.0.0')
 
 **Пример использования (обычно в блоке post { always { ... } }):**
 ```groovy
-cleanLocalDockerImages(imageName: '192.168.0.222:5050/myapp', tag: 'v1.0.0')
+cleanLocalDockerImages(imageName: '192.168.x.x:5050/myapp', tag: 'v1.0.0')
 ```
 
 ### `remoteDockerLogs`
@@ -215,7 +215,7 @@ cleanLocalDockerImages(imageName: '192.168.0.222:5050/myapp', tag: 'v1.0.0')
 ```groovy
 remoteDockerLogs(
     containerName: 'my-bot',
-    host: '192.168.0.223',
+    host: '192.168.x.x',
     user: 'deploy',
     credentialsId: 'my-ssh-key',
     lines: 50
@@ -232,7 +232,7 @@ remoteDockerLogs(
 
 **Пример использования:**
 ```groovy
-checkHttpEndpoint(url: 'http://192.168.0.223:8000/api/health')
+checkHttpEndpoint(url: 'http://192.168.x.x:8000/api/health')
 ```
 
 ### `fixWorkspacePermissions`
@@ -256,7 +256,7 @@ post {
 Вот типичный скелет того, как рекомендуется выстраивать этапы сборки:
 
 ```groovy
-@Library('mylib@main') _
+@Library('your-library-name@main') _
 
 pipeline {
     agent { label 'built-in' }
@@ -266,7 +266,7 @@ pipeline {
     }
     
     environment {
-        REGISTRY_IP = '192.168.0.222'
+        REGISTRY_IP = '192.168.x.x'
         // ... другие переменные
     }
     
@@ -333,7 +333,7 @@ pipeline {
 
 Пример `Jenkinsfile` (вызов):
 ```groovy
-@Library('mylib@main') _
+@Library('your-library-name@main') _
 declarativePipeline(agent: 'built-in')
 ```
 *(Параметр `agent` является обязательным, вы можете указать любой доступный лейбл Jenkins-узла, например `agent: 'my-custom-node'`)*
