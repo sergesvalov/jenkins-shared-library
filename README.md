@@ -2,11 +2,37 @@
 
 Эта библиотека содержит переиспользуемые пайплайн-функции (steps) для Jenkins CI.
 
-## Требования
+## Требования и Плагины
 
-Для работы библиотеки необходимо:
-1. Установленный **Docker** на Jenkins-агенте (или мастере), так как большинство функций (`withNodeBuilder`, `withAndroidBuilder`) выполняют сборку внутри изолированных контейнеров.
-2. Установленный плагин **Pipeline Utility Steps** в Jenkins (требуется для работы декларативных функций, таких как `declarativePipeline`, использующих чтение YAML конфигураций через `readYaml`).
+Для работы библиотеки необходимо, чтобы в вашем Jenkins были установлены следующие плагины (Manage Jenkins -> Plugins):
+1. **Pipeline Utility Steps** — критически важен, используется функцией `declarativePipeline` для чтения конфигурации из `pipeline-config.yaml` (`readYaml`).
+2. **SSH Agent Plugin** — используется функцией `deployDockerCompose` для подключения к удаленным серверам по SSH без передачи паролей в открытом виде.
+3. **Docker Pipeline** (и установленный Docker Engine на самом Jenkins-агенте) — для сборки образов (`buildAndPushDockerImage`) и запуска изолированных агентов (`withNodeBuilder`, `withAndroidBuilder`).
+
+## Настройка Jenkins
+
+### 1. Подключение библиотеки
+Чтобы использовать эту библиотеку во всех ваших проектах:
+1. Зайдите в **Manage Jenkins -> System**.
+2. Найдите блок **Global Pipeline Libraries**.
+3. Добавьте новую библиотеку:
+   - **Name**: `mylib` (именно это имя используется в вызове `@Library('mylib')`).
+   - **Default version**: `main` (или ветка/тег по умолчанию).
+   - Выберите **Git** (или GitHub) и укажите URL репозитория библиотеки (например, `git@github.com:sergesvalov/jenkins-shared-library.git`).
+   - Укажите Credentials (SSH-ключ), у которого есть доступ на чтение этого репозитория.
+
+### 2. Настройка глобальных переменных и доступов
+Пайплайны (в особенности `declarativePipeline`) полагаются на ряд глобальных переменных окружения и учетных данных, которые нужно задать один раз на уровне всего Jenkins.
+
+1. **Глобальные переменные** (Manage Jenkins -> System -> Global properties -> Environment variables):
+   - `SERVER_USER` — имя пользователя на целевом сервере (например, `serge`). *Важно: пайплайн ожидает, что в Jenkins созданы SSH-credentials (ключ) с ID, полностью совпадающим с этим значением!*
+   - `REGISTRY_IP` — IP-адрес или домен вашего Docker-реестра (например, `192.168.0.222`). Если не задано, fallback на `127.0.0.1`.
+   - `PROD_SERVER_IP` (опционально) — IP-адрес продакшен сервера по умолчанию для кластера `prod`.
+
+2. **SSH Ключи** (Manage Jenkins -> Credentials):
+   - Создайте **SSH Username with private key**.
+   - **ID**: должен совпадать со значением `SERVER_USER` (например, `serge`).
+   - Вставьте приватный ключ, который имеет доступ на целевые серверы, куда будет деплоиться код.
 
 ## Как подключить
 
@@ -312,17 +338,27 @@ declarativePipeline(agent: 'built-in')
 ```
 *(Параметр `agent` является обязательным, вы можете указать любой доступный лейбл Jenkins-узла, например `agent: 'my-custom-node'`)*
 
-#### Пример конфигурации `pipeline-config.yaml` для бэкенда (`stack_type: "docker-compose"`)
-Складывается в корневой директории вашего проекта.
+#### Пример конфигурации `pipeline-config.yaml` для мульти-контейнерного проекта
+Складывается в корневой директории вашего проекта. Позволяет собирать несколько образов (backend, frontend) и автоматически запускать БД миграции.
+
 ```yaml
 service_name: "myapp"
 stack_type: "docker-compose"
 target_cluster: "prod"
-ports:
-  host: 85       # Порт, который будет проброшен наружу
-  internal: 8000 # Внутренний порт приложения
+deploy:
+  dir: "/opt/myapp" # Папка на целевом сервере для деплоя
+images:
+  - name: "myapp-backend"
+    context: "./backend"
+  - name: "myapp-frontend"
+    context: "./frontend"
+migrations:
+  service: "backend"
+  delay: 20 # Задержка перед запуском alembic upgrade head
 containers:
-  - "myapp-backend"
+  - "myapp_backend"
+  - "myapp_frontend"
+  - "myapp_db"
 ```
 
 #### Пример конфигурации `pipeline-config.yaml` для мобильного/веб проекта (`stack_type: "capacitor"`)
