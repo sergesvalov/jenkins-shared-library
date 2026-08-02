@@ -402,19 +402,17 @@ features:
 **About data security:**
 *The `pipeline-config.yaml` configuration file must not contain any secret keys, passwords, or credentials. Credentials and keys for accessing servers or Android certificates are pulled automatically by Jenkins from its secure storage (Jenkins Credentials) via global variables (e.g., `SSH_CREDS_ID`, `SERVER_USER`). The config file only contains the general deploy structure.*
 
-### Pipeline Generator (New Approach)
+### Server-Side Validation and Pipeline Generation (New Approach)
 
-To avoid breaking commits late in the CI process and to support highly customized stages ("escape hatches"), you can now explicitly generate your `Jenkinsfile` from `pipeline-config.yaml` using the built-in generator script.
+To avoid breaking builds deep in the CI process and to support highly customized stages ("escape hatches"), `declarativePipeline` now has built-in, early server-side validation and generation.
 
-1. **Pre-commit validation**: By running the generator locally (e.g. via Husky), you can validate your `pipeline-config.yaml` against a JSON Schema before committing. Bad configs will fail the commit immediately.
-2. **Escape hatches**: Add `custom_stages` in your `pipeline-config.yaml` to inject specific steps into the generated pipeline. This ensures "snowflake" repositories can still use the standard template without forking it.
-3. **Dry-run diffs**: Run the generator with `--dry-run` to see how the generated `Jenkinsfile` will change, allowing reviewers to see explicit Pipeline stages instead of a single `declarativePipeline()` call.
+Your `Jenkinsfile` remains a simple one-liner (`declarativePipeline(agent: 'built-in')`), but under the hood Jenkins will do the following:
 
-**Usage:**
-```bash
-node jenkins-shared-library/bin/generate-pipeline.js path/to/pipeline-config.yaml
-```
-**Example `pipeline-config.yaml` with custom stage:**
+1. **Early Validation**: Right at the start of the build, Jenkins pulls the generator script from the library's `resources/` folder and validates your `pipeline-config.yaml` against a JSON Schema. If the configuration is invalid (e.g. typos, missing required fields), the build fails immediately on the first seconds.
+2. **VALIDATE_ONLY Mode (Dry-Run)**: If you want to test how your pipeline will look without actually running the build or deploying, you can run the job in Jenkins and check the **`VALIDATE_ONLY`** parameter. The pipeline will validate the configuration, print the generated `Jenkinsfile` (with all stages and bash scripts) into the Jenkins console, and successfully finish.
+3. **Escape Hatches**: Add `custom_stages` in your `pipeline-config.yaml` to inject specific steps into the dynamically generated pipeline. This ensures "snowflake" repositories can still use the standard template without forking it.
+
+**Example `pipeline-config.yaml` with a custom stage:**
 ```yaml
 service_name: "myapp"
 stack_type: "capacitor"
@@ -422,6 +420,8 @@ custom_stages:
   - name: "Security Scan"
     insert_before: "Test"
     steps: |
-      echo "Running custom security scan..."
-      sh 'npm run scan'
+      script {
+          echo "Running custom security scan..."
+          // sh 'npm run scan'
+      }
 ```
