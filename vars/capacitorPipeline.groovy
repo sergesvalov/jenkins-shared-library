@@ -12,6 +12,7 @@ def call(Map args) {
         parameters {
             booleanParam(name: 'VALIDATE_ONLY',        defaultValue: false, description: 'Only validate config and show generated Jenkinsfile')
             booleanParam(name: 'SKIP_TYPECHECK',       defaultValue: false, description: 'Skip TypeScript check (if applicable)')
+            booleanParam(name: 'SKIP_TESTS',           defaultValue: false, description: 'Skip all tests (Unit and E2E)')
             booleanParam(name: 'BUILD_WEB',             defaultValue: true,  description: 'Build web version and deploy')
             booleanParam(name: 'BUILD_ANDROID',         defaultValue: true,  description: 'Build Android .apk (if applicable)')
             booleanParam(name: 'FORCE_DEPLOY',          defaultValue: false, description: 'Deploy web even if not main branch')
@@ -63,15 +64,15 @@ def call(Map args) {
                 steps {
                     script {
                         env.NODE_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.build | cut -c1-12', returnStdout: true).trim()
-                        if (userParams.FORCE_REBUILD_IMAGES) {
+                        if (params.FORCE_REBUILD_IMAGES) {
                             buildAndPushDockerImage(imageName: env.NODE_IMAGE, tag: env.NODE_IMAGE_TAG, context: '.', extraArgs: '-f Dockerfile.build')
                         } else {
                             buildAndPushIfChanged(env.NODE_IMAGE, env.NODE_IMAGE_TAG, 'Dockerfile.build', 'Node')
                         }
 
-                        if (userParams.BUILD_ANDROID) {
+                        if (params.BUILD_ANDROID) {
                             env.ANDROID_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.android | cut -c1-12', returnStdout: true).trim()
-                            if (userParams.FORCE_REBUILD_IMAGES) {
+                            if (params.FORCE_REBUILD_IMAGES) {
                                 buildAndPushDockerImage(imageName: env.ANDROID_IMAGE, tag: env.ANDROID_IMAGE_TAG, context: '.', extraArgs: '-f Dockerfile.android')
                             } else {
                                 buildAndPushIfChanged(env.ANDROID_IMAGE, env.ANDROID_IMAGE_TAG, 'Dockerfile.android', 'Android')
@@ -94,7 +95,7 @@ def call(Map args) {
 
             stage('TypeScript Check') {
                 when { 
-                    expression { return env.HAS_FEATURE_TYPECHECK == 'true' && !userParams.SKIP_TYPECHECK } 
+                    expression { return env.HAS_FEATURE_TYPECHECK == 'true' && !params.SKIP_TYPECHECK } 
                 }
                 steps {
                     script {
@@ -108,7 +109,7 @@ def call(Map args) {
 
             stage('Test') {
                 when { 
-                    expression { return env.HAS_FEATURE_TESTS == 'true' || env.HAS_FEATURE_E2E == 'true' } 
+                    expression { return (env.HAS_FEATURE_TESTS == 'true' || env.HAS_FEATURE_E2E == 'true') && !params.SKIP_TESTS } 
                 }
                 steps {
                     script {
@@ -133,7 +134,7 @@ def call(Map args) {
 
             stage('Build: Web (Capacitor)') {
                 when { 
-                    expression { return userParams.BUILD_WEB } 
+                    expression { return params.BUILD_WEB } 
                 }
                 steps {
                     script {
@@ -154,7 +155,7 @@ def call(Map args) {
 
             stage('Build: Android (.apk)') {
                 when { 
-                    expression { return userParams.BUILD_ANDROID } 
+                    expression { return params.BUILD_ANDROID } 
                 }
                 steps {
                     script {
@@ -176,9 +177,9 @@ def call(Map args) {
                 when {
                     anyOf {
                         branch 'main'
-                        expression { return userParams.FORCE_DEPLOY }
+                        expression { return params.FORCE_DEPLOY }
                     }
-                    expression { return userParams.BUILD_WEB }
+                    expression { return params.BUILD_WEB }
                 }
                 steps {
                     script {
