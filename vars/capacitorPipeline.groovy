@@ -10,6 +10,7 @@ def call(Map args) {
             skipDefaultCheckout()
         }
         parameters {
+            booleanParam(name: 'VALIDATE_ONLY',        defaultValue: false, description: 'Only validate config and show generated Jenkinsfile')
             booleanParam(name: 'SKIP_TYPECHECK',       defaultValue: false, description: 'Skip TypeScript check (if applicable)')
             booleanParam(name: 'BUILD_WEB',             defaultValue: true,  description: 'Build web version and deploy')
             booleanParam(name: 'BUILD_ANDROID',         defaultValue: true,  description: 'Build Android .apk (if applicable)')

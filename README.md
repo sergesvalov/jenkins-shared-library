@@ -401,3 +401,27 @@ features:
 
 **About data security:**
 *The `pipeline-config.yaml` configuration file must not contain any secret keys, passwords, or credentials. Credentials and keys for accessing servers or Android certificates are pulled automatically by Jenkins from its secure storage (Jenkins Credentials) via global variables (e.g., `SSH_CREDS_ID`, `SERVER_USER`). The config file only contains the general deploy structure.*
+
+### Pipeline Generator (New Approach)
+
+To avoid breaking commits late in the CI process and to support highly customized stages ("escape hatches"), you can now explicitly generate your `Jenkinsfile` from `pipeline-config.yaml` using the built-in generator script.
+
+1. **Pre-commit validation**: By running the generator locally (e.g. via Husky), you can validate your `pipeline-config.yaml` against a JSON Schema before committing. Bad configs will fail the commit immediately.
+2. **Escape hatches**: Add `custom_stages` in your `pipeline-config.yaml` to inject specific steps into the generated pipeline. This ensures "snowflake" repositories can still use the standard template without forking it.
+3. **Dry-run diffs**: Run the generator with `--dry-run` to see how the generated `Jenkinsfile` will change, allowing reviewers to see explicit Pipeline stages instead of a single `declarativePipeline()` call.
+
+**Usage:**
+```bash
+node jenkins-shared-library/bin/generate-pipeline.js path/to/pipeline-config.yaml
+```
+**Example `pipeline-config.yaml` with custom stage:**
+```yaml
+service_name: "myapp"
+stack_type: "capacitor"
+custom_stages:
+  - name: "Security Scan"
+    insert_before: "Test"
+    steps: |
+      echo "Running custom security scan..."
+      sh 'npm run scan'
+```

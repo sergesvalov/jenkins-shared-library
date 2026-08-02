@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pipeline Config Schema",
+  "type": "object",
+  "required": ["service_name", "stack_type"],
+  "properties": {
+    "service_name": { "type": "string" },
+    "stack_type": { "type": "string", "enum": ["capacitor", "docker-compose", "node"] },
+    "target_cluster": { "type": "string" },
+    "deploy": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "dir": { "type": "string" },
+        "web_port": { "type": "integer" }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["typecheck", "tests", "e2e"] }
+    },
+    "custom_stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "steps"],
+        "properties": {
+          "name": { "type": "string" },
+          "insert_before": { "type": "string" },
+          "insert_after": { "type": "string" },
+          "replace": { "type": "string" },
+          "steps": { "type": "string" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

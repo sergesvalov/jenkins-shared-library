@@ -10,6 +10,7 @@ def call(Map args) {
             skipDefaultCheckout()
         }
         parameters {
+            booleanParam(name: 'VALIDATE_ONLY', defaultValue: false, description: 'Only validate config and show generated Jenkinsfile')
             booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Deploy even if not main branch')
         }
         stages {
