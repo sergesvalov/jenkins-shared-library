@@ -326,5 +326,5 @@ if (isDryRun) {
     }
 } else {
     fs.writeFileSync(targetJenkinsfile, finalJenkinsfile);
-    console.log(\`Successfully generated \${targetJenkinsfile} from \${configPath}\`);
+    console.log(`Successfully generated ${targetJenkinsfile} from ${configPath}`);
 }
