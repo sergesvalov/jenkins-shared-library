@@ -308,8 +308,9 @@ pipeline {
 Пример `Jenkinsfile`:
 ```groovy
 @Library('mylib@main') _
-declarativePipeline()
+declarativePipeline(agent: 'built-in')
 ```
+*(Параметр `agent` является обязательным, вы можете указать любой лейбл агента, например `agent: 'my-custom-node'`)*
 
 Пример `pipeline-config.yaml` для бэкенда (`stack_type: "docker-compose"`):
 ```yaml

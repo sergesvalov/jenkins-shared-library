@@ -1,7 +1,11 @@
-def call() {
+def call(Map params = [:]) {
+    if (!params.agent) {
+        error("You must specify an agent parameter, e.g., declarativePipeline(agent: 'built-in')")
+    }
+    def buildAgent = params.agent
+    
     pipeline {
-        agent { label 'built-in' }
-
+        agent { label "${buildAgent}" }
         options {
             skipDefaultCheckout()
         }
