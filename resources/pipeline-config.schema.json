@@ -32,6 +32,45 @@
           "steps": { "type": "string" }
         }
       }
+    },
+    "ports": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "integer" },
+        "internal": { "type": "integer" }
+      }
+    },
+    "volumes": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "containers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "migrations": {
+      "anyOf": [
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "properties": {
+            "delay": { "type": "integer" },
+            "service": { "type": "string" },
+            "composeFile": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "context": { "type": "string" }
+        },
+        "required": ["name"]
+      }
     }
   },
   "additionalProperties": false
