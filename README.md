@@ -402,26 +402,73 @@ features:
 **About data security:**
 *The `pipeline-config.yaml` configuration file must not contain any secret keys, passwords, or credentials. Credentials and keys for accessing servers or Android certificates are pulled automatically by Jenkins from its secure storage (Jenkins Credentials) via global variables (e.g., `SSH_CREDS_ID`, `SERVER_USER`). The config file only contains the general deploy structure.*
 
-### Server-Side Validation and Pipeline Generation (New Approach)
+### Extensibility and Inheritance
 
-To avoid breaking builds deep in the CI process and to support highly customized stages ("escape hatches"), `declarativePipeline` now has built-in, early server-side validation and generation.
+To support unique project requirements while maintaining standard pipelines, `declarativePipeline` provides a built-in extensibility model. You can either inherit and modify the standard template via `custom_stages` (Aspect-Oriented approach) or compose your own pipeline using low-level steps.
 
-Your `Jenkinsfile` remains a simple one-liner (`declarativePipeline(agent: 'built-in')`), but under the hood Jenkins will do the following:
+#### 1. Server-Side Validation & Dry-Run
+Right at the start of the build, Jenkins validates your `pipeline-config.yaml` against a JSON Schema. If the configuration is invalid, the build fails immediately.
+If you want to test how your pipeline will look without actually running the build or deploying, run the job in Jenkins with the **`VALIDATE_ONLY`** parameter. The pipeline will print the generated `Jenkinsfile` into the console and successfully finish.
 
-1. **Early Validation**: Right at the start of the build, Jenkins pulls the generator script from the library's `resources/` folder and validates your `pipeline-config.yaml` against a JSON Schema. If the configuration is invalid (e.g. typos, missing required fields), the build fails immediately on the first seconds.
-2. **VALIDATE_ONLY Mode (Dry-Run)**: If you want to test how your pipeline will look without actually running the build or deploying, you can run the job in Jenkins and check the **`VALIDATE_ONLY`** parameter. The pipeline will validate the configuration, print the generated `Jenkinsfile` (with all stages and bash scripts) into the Jenkins console, and successfully finish.
-3. **Escape Hatches**: Add `custom_stages` in your `pipeline-config.yaml` to inject specific steps into the dynamically generated pipeline. This ensures "snowflake" repositories can still use the standard template without forking it.
+#### 2. Inheriting and Modifying the Pipeline (`custom_stages`)
+If the standard `stack_type` template fits your project by 90%, you can use `custom_stages` to inject, replace, or append specific steps without rewriting the pipeline.
 
-**Example `pipeline-config.yaml` with a custom stage:**
+Available insertion strategies:
+* `insert_before: "Stage Name"` — Inject your stage before an existing one.
+* `insert_after: "Stage Name"` — Inject your stage after an existing one.
+* `replace: "Stage Name"` — Completely replace an existing standard stage.
+* No strategy (default) — Append the stage at the end of the pipeline.
+
+**Example: Replacing a standard stage and inserting a new one:**
 ```yaml
 service_name: "myapp"
 stack_type: "capacitor"
 custom_stages:
-  - name: "Security Scan"
+  - name: "Custom Security Scan"
     insert_before: "Test"
     steps: |
       script {
           echo "Running custom security scan..."
-          // sh 'npm run scan'
+          sh 'npm run scan'
       }
+  - name: "Deploy"
+    replace: "Deploy"
+    steps: |
+      script {
+          echo "Overriding standard deploy with custom S3 upload..."
+          sh 'aws s3 sync dist/ s3://my-bucket/'
+      }
+```
+
+#### 3. Composition (Recreating the Pipeline)
+If your project is highly non-standard and the `custom_stages` approach is not enough, you can completely ignore `declarativePipeline` and write a standard `Jenkinsfile` in your repository. Instead of starting from scratch, you construct your custom workflow using the low-level functions provided by this shared library (Composition).
+
+**Example of a custom `Jenkinsfile` using library blocks:**
+```groovy
+@Library('your-library-name@main') _
+
+pipeline {
+    agent { label 'built-in' }
+    stages {
+        stage('Custom Build Engine') {
+            steps {
+                // Reuse the isolated environment wrapper
+                withNodeBuilder {
+                    sh 'npm run weird-build-process'
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                // Reuse the deployment function
+                deployDockerCompose(
+                    credentialsId: 'deploy_user', 
+                    host: '10.0.0.1', 
+                    dir: '/opt/app', 
+                    composeFile: 'compose.yml'
+                )
+            }
+        }
+    }
+}
 ```
