@@ -300,3 +300,41 @@ pipeline {
 2. **Кэширование**: Обертки `with*Builder` автоматически подключают именованные тома (`NPM_CACHE_VOLUME` и `GRADLE_CACHE_VOLUME`). Это ускоряет сборку в десятки раз по сравнению с чистой загрузкой пакетов при каждом запуске.
 3. **Безопасность**: Скрывайте учетные данные. Передавайте только ID кредов (как в `deployDockerCompose`) или пути к защищенным файлам (`buildCapacitorAndroid`).
 4. **DRY (Don't Repeat Yourself)**: Если вы видите, что один и тот же bash-скрипт из 5-10 строк кочует из проекта в проект (как это было с хаком `aapt2` для arm64), выносите его в файл `vars/stepName.groovy` в эту библиотеку.
+
+### Использование `declarativePipeline` (Новый стандарт)
+
+Новый стандарт требует минимизации `Jenkinsfile` в проектах и выноса логики в универсальный шаг `declarativePipeline()`. Конфигурация выносится в файл `pipeline-config.yaml` в корне проекта.
+
+Пример `Jenkinsfile`:
+```groovy
+@Library('mylib@main') _
+declarativePipeline()
+```
+
+Пример `pipeline-config.yaml` для бэкенда (`stack_type: "docker-compose"`):
+```yaml
+service_name: "myassistant"
+stack_type: "docker-compose"
+target_cluster: "prod"
+ports:
+  host: 85
+  internal: 8000
+containers:
+  - "garmin-stats-assistant"
+```
+
+Пример `pipeline-config.yaml` для мобильного/веб проекта (`stack_type: "capacitor"`):
+```yaml
+service_name: "itdefence"
+stack_type: "capacitor"
+target_cluster: "prod"
+deploy:
+  host: "192.168.0.222"
+  dir: "/opt/itdefence"
+  web_port: 7979
+features:
+  - typecheck
+  - tests
+  - e2e
+```
+*Обратите внимание: никаких паролей и секретов в yaml нет. Учетные данные Jenkins берет из своих Credentials (`SSH_CREDS_ID`, и т.д.).*
