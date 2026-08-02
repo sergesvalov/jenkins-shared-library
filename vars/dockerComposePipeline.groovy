@@ -117,6 +117,8 @@ def call(Map args) {
                     if (env.DOCKER_IMAGE && env.BUILD_TAG) {
                         cleanLocalDockerImages(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
                     }
+                    sh 'docker image prune -f || true'
+                    sh "docker run --rm -v \$(pwd):/workspace alpine chown -R \$(id -u):\$(id -g) /workspace || true"
                 }
             }
             success {
