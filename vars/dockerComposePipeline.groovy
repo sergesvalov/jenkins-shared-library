@@ -44,7 +44,14 @@ def call(Map args) {
             stage('Build & Push Image') {
                 steps {
                     script {
-                        buildAndPushDockerImage(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
+                        if (config.images) {
+                            config.images.each { img ->
+                                def imgName = "${env.REGISTRY_IP}:5050/${img.name}"
+                                buildAndPushDockerImage(imageName: imgName, tag: env.BUILD_TAG, context: img.context ?: '.')
+                            }
+                        } else {
+                            buildAndPushDockerImage(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
+                        }
                         stash name: 'compose', includes: 'docker-compose.yml'
                     }
                 }
@@ -75,9 +82,32 @@ def call(Map args) {
                             dir: env.DEPLOY_TARGET_DIR,
                             composeFile: 'docker-compose.yml',
                             envVars: [
-                                'DOCKER_IMAGE': env.DOCKER_IMAGE
+                                'DOCKER_IMAGE': env.DOCKER_IMAGE,
+                                'BUILD_TAG': env.BUILD_TAG,
+                                'REGISTRY_IP': env.REGISTRY_IP
                             ]
                         )
+                    }
+                }
+            }
+
+            stage('Run Migrations') {
+                when {
+                    expression { return config.migrations != null }
+                }
+                steps {
+                    script {
+                        def delay = config.migrations.delay ?: 20
+                        def service = config.migrations.service ?: 'backend'
+                        def composeFile = config.migrations.composeFile ?: 'docker-compose.yml'
+                        
+                        echo "Waiting ${delay}s for DB to be ready..."
+                        sleep time: delay, unit: 'SECONDS'
+                        
+                        sshagent(credentials: [env.SSH_CREDS_ID]) {
+                            sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'cd ${env.DEPLOY_TARGET_DIR} && docker compose -f ${composeFile} logs ${service}'"
+                            sh "ssh -o StrictHostKeyChecking=no ${env.SERVER_USER}@${env.DEPLOY_TARGET_HOST} 'cd ${env.DEPLOY_TARGET_DIR} && docker compose -f ${composeFile} exec -T ${service} alembic upgrade head'"
+                        }
                     }
                 }
             }
@@ -114,7 +144,11 @@ def call(Map args) {
         post {
             always {
                 script {
-                    if (env.DOCKER_IMAGE && env.BUILD_TAG) {
+                    if (config.images) {
+                        config.images.each { img ->
+                            cleanLocalDockerImages(imageName: "${env.REGISTRY_IP}:5050/${img.name}", tag: env.BUILD_TAG)
+                        }
+                    } else if (env.DOCKER_IMAGE && env.BUILD_TAG) {
                         cleanLocalDockerImages(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
                     }
                     sh 'docker image prune -f || true'
