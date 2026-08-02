@@ -267,3 +267,9 @@ custom_stages:
 To avoid breaking builds deep in the CI process, `declarativePipeline` has built-in early validation. Right at the start of the build, Jenkins validates your `pipeline-config.yaml` against a JSON Schema. If the configuration is invalid, the build fails immediately.
 
 If you want to test how your pipeline will look without actually running the build or deploying, run the job in Jenkins with the **`VALIDATE_ONLY`** parameter. The pipeline will print the generated `Jenkinsfile` into the console and successfully finish.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute this code, provided that you include the copyright notice and a link back to this repository.
