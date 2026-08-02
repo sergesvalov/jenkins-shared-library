@@ -6,7 +6,7 @@ def call(Map args = [:]) {
     def schemaJson = libraryResource('pipeline-config.schema.json')
     
     // Сохраняем во временные файлы в workspace
-    writeFile file: 'generate-pipeline.js', text: generatorScript
+    writeFile file: 'generate-pipeline.cjs', text: generatorScript
     writeFile file: 'pipeline-config.schema.json', text: schemaJson
 
     echo "🔍 Валидация ${configPath}..."
@@ -18,6 +18,6 @@ def call(Map args = [:]) {
         
         // Запуск генератора. Если конфиг инвалидный, Node.js завершится с exit 1,
         // что автоматически уронит Pipeline на этом шаге (sh throw error).
-        sh "node generate-pipeline.js ${configPath} --dry-run"
+        sh "node generate-pipeline.cjs ${configPath} --dry-run"
     }
 }
