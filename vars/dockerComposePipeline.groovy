@@ -76,17 +76,25 @@ def call(Map args) {
                             }
                         }
                         
+                        def deployEnvVars = [
+                            'DOCKER_IMAGE': env.DOCKER_IMAGE,
+                            'BUILD_TAG': env.BUILD_TAG,
+                            'REGISTRY_IP': env.REGISTRY_IP
+                        ]
+                        
+                        if (config.envVars) {
+                            config.envVars.each { varName ->
+                                deployEnvVars[varName] = env[varName] ?: ''
+                            }
+                        }
+                        
                         deployDockerCompose(
                             credentialsId: env.SSH_CREDS_ID,
                             user: env.SERVER_USER,
                             host: env.DEPLOY_TARGET_HOST,
                             dir: env.DEPLOY_TARGET_DIR,
                             composeFile: 'docker-compose.yml',
-                            envVars: [
-                                'DOCKER_IMAGE': env.DOCKER_IMAGE,
-                                'BUILD_TAG': env.BUILD_TAG,
-                                'REGISTRY_IP': env.REGISTRY_IP
-                            ]
+                            envVars: deployEnvVars
                         )
                         
                         if (config.migrations) {
