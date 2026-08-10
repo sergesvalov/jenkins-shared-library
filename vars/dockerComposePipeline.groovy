@@ -53,7 +53,7 @@ def call(Map args) {
                         } else {
                             buildAndPushDockerImage(imageName: env.DOCKER_IMAGE, tag: env.BUILD_TAG)
                         }
-                        stash name: 'compose', includes: 'docker-compose.yml'
+                        stash name: 'compose', includes: 'docker-compose*.yml, *.yaml, *.yml, *.conf'
                     }
                 }
             }
