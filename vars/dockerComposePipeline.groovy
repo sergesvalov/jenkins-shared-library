@@ -76,7 +76,7 @@ def call(Map args) {
                             }
                         }
                         
-                        def deployEnvVars = [
+                        def deployVars = [
                             'DOCKER_IMAGE': env.DOCKER_IMAGE,
                             'BUILD_TAG': env.BUILD_TAG,
                             'REGISTRY_IP': env.REGISTRY_IP
@@ -84,7 +84,9 @@ def call(Map args) {
                         
                         if (config.envVars) {
                             config.envVars.each { varName ->
-                                deployEnvVars[varName] = env[varName] ?: ''
+                                if (env[varName] != null) {
+                                    deployVars[varName] = env[varName]
+                                }
                             }
                         }
                         
@@ -94,7 +96,7 @@ def call(Map args) {
                             host: env.DEPLOY_TARGET_HOST,
                             dir: env.DEPLOY_TARGET_DIR,
                             composeFile: 'docker-compose.yml',
-                            envVars: deployEnvVars
+                            envVars: deployVars
                         )
                         
                         if (config.migrations) {
