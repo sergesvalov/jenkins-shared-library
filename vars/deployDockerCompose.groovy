@@ -5,10 +5,10 @@ def call(Map config) {
         
         if (config.envVars) {
             def envString = config.envVars.collect { k, v -> "${k}=${v}" }.join('\n')
-            writeFile file: '.env', text: envString
-            sh "scp -o StrictHostKeyChecking=no .env ${config.user}@${config.host}:${config.dir}/.env"
+            writeFile file: '.env.deploy', text: envString
+            sh "scp -o StrictHostKeyChecking=no .env.deploy ${config.user}@${config.host}:${config.dir}/.env.deploy"
         }
         
-        sh "ssh -o StrictHostKeyChecking=no ${config.user}@${config.host} 'cd ${config.dir} && docker compose pull && docker compose up -d --remove-orphans'"
+        sh "ssh -o StrictHostKeyChecking=no ${config.user}@${config.host} 'cd ${config.dir} && touch .env && docker compose --env-file .env --env-file .env.deploy pull && docker compose --env-file .env --env-file .env.deploy up -d --remove-orphans'"
     }
 }
