@@ -118,12 +118,13 @@ def call(Map args) {
             stage('Health Check') {
                 steps {
                     script {
-                        if (env.HOST_PORT) {
-                            echo "Verifying application availability..."
+                        def hcUrl = config.healthcheck_url ?: (env.HOST_PORT ? "http://${env.DEPLOY_TARGET_HOST}:${env.HOST_PORT}/api/health" : null)
+                        if (hcUrl) {
+                            echo "Verifying application availability at ${hcUrl} ..."
                             try {
-                                checkHttpEndpoint(url: "http://${env.DEPLOY_TARGET_HOST}:${env.HOST_PORT}/api/health", retries: 5, sleepTime: 5)
+                                checkHttpEndpoint(url: hcUrl, retries: 5, sleepTime: 5)
                             } catch (Exception e) {
-                                echo "Warning: API might not be ready. Error: ${e.message}"
+                                echo "Warning: Application at ${hcUrl} might not be ready. Error: ${e.message}"
                             }
                         }
                         
