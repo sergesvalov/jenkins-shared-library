@@ -75,7 +75,8 @@
     "envVars": {
       "type": "array",
       "items": { "type": "string" }
-    }
+    },
+    "healthcheck_url": { "type": "string" }
   },
   "additionalProperties": false
 }
