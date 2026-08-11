@@ -86,7 +86,7 @@ signAndroidApk(
 ```
 
 ### `deployDockerCompose`
-Deploys an application via Docker Compose to a remote server over SSH, using the `sshagent` plugin. Pre-creates the directory on the server, copies the compose file there, and runs `docker compose up`.
+Deploys an application via Docker Compose to a remote server over SSH, using the `sshagent` plugin. Pre-creates the directory on the server, copies the compose file there, and runs `docker compose up`. If `envVars` are provided, it generates a `.env.deploy` file on the remote server and runs compose with both `--env-file .env` and `--env-file .env.deploy`, ensuring the server's local `.env` is preserved.
 **Usage example:**
 ```groovy
 deployDockerCompose(
@@ -216,6 +216,7 @@ stack_type: "docker-compose"
 target_cluster: "prod"
 deploy:
   dir: "/opt/myapp"
+healthcheck_url: "http://192.168.x.x:8125/health"
 images:
   - name: "myapp-backend"
     context: "./backend"
@@ -225,6 +226,9 @@ migrations:
 containers:
   - "myapp_backend"
   - "myapp_db"
+envVars:
+  - SECRET_KEY
+  - DATABASE_URL
 ```
 
 **For a Capacitor project:**

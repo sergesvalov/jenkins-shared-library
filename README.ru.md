@@ -82,7 +82,7 @@ signAndroidApk(
 ```
 
 ### `deployDockerCompose`
-Деплоит приложение через Docker Compose на удаленный сервер по SSH, используя плагин `sshagent`. Предварительно создает директорию на сервере, копирует туда compose-файл и запускает `docker compose up`.
+Деплоит приложение через Docker Compose на удаленный сервер по SSH, используя плагин `sshagent`. Предварительно создает директорию на сервере, копирует туда compose-файл и запускает `docker compose up`. Если переданы `envVars`, генерирует файл `.env.deploy` на сервере и запускает контейнеры с ключами `--env-file .env --env-file .env.deploy`, чтобы не затирать локальный файл `.env` на сервере.
 **Пример использования:**
 ```groovy
 deployDockerCompose(
@@ -212,6 +212,7 @@ stack_type: "docker-compose"
 target_cluster: "prod"
 deploy:
   dir: "/opt/myapp"
+healthcheck_url: "http://192.168.x.x:8125/health"
 images:
   - name: "myapp-backend"
     context: "./backend"
@@ -221,6 +222,9 @@ migrations:
 containers:
   - "myapp_backend"
   - "myapp_db"
+envVars:
+  - SECRET_KEY
+  - DATABASE_URL
 ```
 
 **Для Capacitor проекта:**
