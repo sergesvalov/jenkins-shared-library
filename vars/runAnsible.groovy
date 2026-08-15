@@ -1,4 +1,4 @@
-﻿def call(Map params = [:]) {
+def call(Map params = [:]) {
     def inventory = params.inventory ?: 'ansible/inventory.ini'
     def playbook = params.playbook
     def sshCredential = params.sshCredential
