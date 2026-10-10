@@ -5,6 +5,8 @@ def call(Map config = [:]) {
     def keyalias = config.keyalias ?: 'release'
     def keypass = config.keypass ?: 'password'
     def generateAssets = config.generateAssets ?: false
+    // The signed APK is named after the service (pipeline-config.yaml: service_name)
+    def apkName = config.apkName ?: env.SERVICE_NAME ?: 'app-release'
 
     withAndroidBuilder {
         // 1. Build web part for mobile
@@ -34,7 +36,7 @@ def call(Map config = [:]) {
 
         signAndroidApk(
             unsignedApk: 'android/app/build/outputs/apk/release/app-release-unsigned.apk',
-            signedApk:   'android/app/build/outputs/apk/release/app-release.apk',
+            signedApk:   "android/app/build/outputs/apk/release/${apkName}.apk",
             keystore:    keystore,
             storepass:   storepass,
             keyalias:    keyalias,

@@ -99,6 +99,7 @@ deployDockerCompose(
 
 ### `buildCapacitorAndroid`
 Выполняет полный цикл сборки Android APK для Capacitor-проектов (Vite-билд, инициализация, Gradle-компиляция и подпись). Обернуто в `withAndroidBuilder`.
+Подписанный APK называется по имени сервиса: `<service_name>.apk` (из `env.SERVICE_NAME`); другое имя задаётся параметром `apkName`.
 **Пример использования:**
 ```groovy
 buildCapacitorAndroid(
