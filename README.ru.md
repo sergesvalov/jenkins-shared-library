@@ -67,6 +67,22 @@ withAndroidBuilder {
 }
 ```
 
+### `withApkSigningKey`
+Выполняет блок с ключом подписи Android-релиза и затем удаляет ключ. Хранилище ключей, его пароль и алиас берутся из учётных данных Jenkins, которые Jenkins заполняет из OpenBao — библиотека публичная, поэтому в ней **только идентификаторы учётных данных, никаких секретов**. Внутри блока: `APK_KEYSTORE_FILE` (хранилище, восстановленное во временную папку с доступом только владельцу), `APK_KEYSTORE_PASSWORD` (он же пароль ключа), `APK_KEY_ALIAS` и `APK_SIGNING` (`true` или `false`, если подпись пропущена). Передавайте секреты по имени переменной (`docker run -e APK_KEYSTORE_PASSWORD`, `apksigner --ks-pass env:…`), а не в командной строке.
+Параметры: `keystoreCredentialsId` (по умолчанию `apk-keystore-base64`), `passwordCredentialsId` (`apk-sign-key`), `aliasCredentialsId` (`apk-key-alias`), `required` (по умолчанию `true`: падать без учётных данных; `false`: собрать без подписи с предупреждением), `keyDir` (куда восстановить хранилище; должно быть видно сборке).
+**Пример (Gradle в контейнере):**
+```groovy
+withApkSigningKey {
+    sh '''
+        docker run --rm -v "$PWD/android":/app -w /app \
+            -v "$APK_KEYSTORE_FILE":/signing/release.keystore:ro \
+            -e APK_KEYSTORE_FILE=/signing/release.keystore -e APK_KEYSTORE_PASSWORD -e APK_KEY_ALIAS \
+            my-android-builder ./gradlew assembleRelease
+    '''
+}
+```
+Со стороны Gradle (`app/build.gradle.kts`): конфигурация подписи `release`, читающая `APK_KEYSTORE_FILE`, `APK_KEYSTORE_PASSWORD` и `APK_KEY_ALIAS` из окружения.
+
 ### `signAndroidApk`
 Выравнивает (zipalign) и подписывает (apksigner) Android APK.
 **Пример использования:**
@@ -75,9 +91,9 @@ signAndroidApk(
     unsignedApk: 'android/app/build/outputs/apk/release/app-release-unsigned.apk',
     signedApk:   'android/app/build/outputs/apk/release/app-release.apk',
     keystore:    'keystore/release.keystore',
-    storepass:   'password',
+    storepass:   env.APK_KEYSTORE_PASSWORD,  // e.g. inside withApkSigningKey; never a literal
     keyalias:    'release',
-    keypass:     'password'
+    keypass:     env.APK_KEYSTORE_PASSWORD
 )
 ```
 
@@ -105,9 +121,9 @@ deployDockerCompose(
 buildCapacitorAndroid(
     buildScript: 'VITE_MODE=capacitor npm run build:cap',
     keystore: 'keystore/release.keystore',
-    storepass: 'password',
+    storepass: env.APK_KEYSTORE_PASSWORD,
     keyalias: 'release',
-    keypass: 'password'
+    keypass: env.APK_KEYSTORE_PASSWORD
 )
 ```
 

@@ -10,24 +10,29 @@ def call(Map args) {
 
     def alignedApk  = unsignedApk.replace('.apk', '-aligned.apk')
 
-    sh """
-        if [ -f "${unsignedApk}" ]; then
-            echo "Aligning APK (zipalign)..."
-            ${zipalign} -v -p 4 "${unsignedApk}" "${alignedApk}"
-            
-            echo "Signing APK (apksigner)..."
-            /opt/android-sdk/build-tools/${buildTools}/apksigner sign \\
-                --ks "${keystore}" \\
-                --ks-pass pass:${storepass} \\
-                --ks-key-alias "${keyalias}" \\
-                --key-pass pass:${keypass} \\
-                --out "${signedApk}" "${alignedApk}"
-            
-            echo "Removing temporary files..."
-            rm -f "${unsignedApk}" "${alignedApk}"
-        else
-            echo "Built unsigned APK not found at ${unsignedApk}"
-            exit 1
-        fi
-    """
+    // The passwords reach apksigner through the environment (env:), not the command line, so they
+    // never show up in process lists or the build log. With a key from withApkSigningKey, pass
+    // storepass/keypass: env.APK_KEYSTORE_PASSWORD.
+    withEnv(["SIGN_STOREPASS=${storepass}", "SIGN_KEYPASS=${keypass}"]) {
+        sh """
+            if [ -f "${unsignedApk}" ]; then
+                echo "Aligning APK (zipalign)..."
+                ${zipalign} -v -p 4 "${unsignedApk}" "${alignedApk}"
+
+                echo "Signing APK (apksigner)..."
+                /opt/android-sdk/build-tools/${buildTools}/apksigner sign \\
+                    --ks "${keystore}" \\
+                    --ks-pass env:SIGN_STOREPASS \\
+                    --ks-key-alias "${keyalias}" \\
+                    --key-pass env:SIGN_KEYPASS \\
+                    --out "${signedApk}" "${alignedApk}"
+
+                echo "Removing temporary files..."
+                rm -f "${unsignedApk}" "${alignedApk}"
+            else
+                echo "Built unsigned APK not found at ${unsignedApk}"
+                exit 1
+            fi
+        """
+    }
 }

@@ -71,6 +71,22 @@ withAndroidBuilder {
 }
 ```
 
+### `withApkSigningKey`
+Runs a block with the Android release signing key, then deletes it. The keystore, its password and the key alias come from Jenkins credentials that Jenkins fills from OpenBao — this library is public, so it contains **only credential IDs, never secrets**. Inside the block: `APK_KEYSTORE_FILE` (keystore restored into a private temp dir), `APK_KEYSTORE_PASSWORD` (also the key password), `APK_KEY_ALIAS`, and `APK_SIGNING` (`true`, or `false` when signing was skipped). Pass the secrets on by variable name (`docker run -e APK_KEYSTORE_PASSWORD`, `apksigner --ks-pass env:…`), never on a command line.
+Options: `keystoreCredentialsId` (default `apk-keystore-base64`), `passwordCredentialsId` (`apk-sign-key`), `aliasCredentialsId` (`apk-key-alias`), `required` (default `true`: fail when the credentials are missing; `false`: build unsigned with a warning), `keyDir` (where the keystore is restored; must be visible to the build).
+**Usage example (Gradle in a container):**
+```groovy
+withApkSigningKey {
+    sh '''
+        docker run --rm -v "$PWD/android":/app -w /app \
+            -v "$APK_KEYSTORE_FILE":/signing/release.keystore:ro \
+            -e APK_KEYSTORE_FILE=/signing/release.keystore -e APK_KEYSTORE_PASSWORD -e APK_KEY_ALIAS \
+            my-android-builder ./gradlew assembleRelease
+    '''
+}
+```
+Gradle side (`app/build.gradle.kts`): a `release` signing config reading `APK_KEYSTORE_FILE`, `APK_KEYSTORE_PASSWORD` and `APK_KEY_ALIAS` from the environment.
+
 ### `signAndroidApk`
 Aligns (zipalign) and signs (apksigner) an Android APK. Accepts parameters as a Map.
 **Usage example:**
@@ -79,9 +95,9 @@ signAndroidApk(
     unsignedApk: 'android/app/build/outputs/apk/release/app-release-unsigned.apk',
     signedApk:   'android/app/build/outputs/apk/release/app-release.apk',
     keystore:    'keystore/release.keystore',
-    storepass:   'password',
+    storepass:   env.APK_KEYSTORE_PASSWORD,  // e.g. inside withApkSigningKey; never a literal
     keyalias:    'release',
-    keypass:     'password'
+    keypass:     env.APK_KEYSTORE_PASSWORD
 )
 ```
 
@@ -109,9 +125,9 @@ The signed APK is named after the service: `<service_name>.apk` (from `env.SERVI
 buildCapacitorAndroid(
     buildScript: 'VITE_MODE=capacitor npm run build:cap',
     keystore: 'keystore/release.keystore',
-    storepass: 'password',
+    storepass: env.APK_KEYSTORE_PASSWORD,
     keyalias: 'release',
-    keypass: 'password'
+    keypass: env.APK_KEYSTORE_PASSWORD
 )
 ```
 
