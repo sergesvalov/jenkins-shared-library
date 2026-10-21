@@ -83,6 +83,21 @@ withApkSigningKey {
 ```
 Со стороны Gradle (`app/build.gradle.kts`): конфигурация подписи `release`, читающая `APK_KEYSTORE_FILE`, `APK_KEYSTORE_PASSWORD` и `APK_KEY_ALIAS` из окружения.
 
+### `withPersistentApkKey`
+Выполняет блок с **постоянным** ключом подписи Android-релиза (как в foodplanner): хранилище создаётся один раз и лежит в кеше Jenkins (не в git), поэтому все сборки подписаны одним ключом и новый APK ставится обновлением поверх старого. Пароль — из учётных данных Jenkins, которые заполняются из OpenBao; в библиотеке **только идентификаторы учётных данных**. Внутри блока: `APK_KEYSTORE_DIR` (смонтируйте в контейнер сборки), `APK_KEYSTORE_FILE`, `APK_KEYSTORE_PASSWORD` (он же пароль ключа), `APK_KEY_ALIAS`.
+Ключ: нет — создаётся; открывается паролем — используется; открывается только `legacyPassword` — один раз перешифровывается паролем из OpenBao (ключ тот же, копия — `release.keystore.bak`, установленные приложения обновляются); не открывается ничем — шаг падает и ключ не трогает (с новым ключом приложение придётся переустановить на всех телефонах — решает человек).
+Параметры: `keyDir` и `alias` (обязательные), `passwordCredentialsId` (по умолчанию `apk-sign-key`), `fallbackCredentialsId` (если первых нет или они пустые), `legacyPassword` (прежний пароль ключа — передаёт сам проект, здесь значения по умолчанию нет), `dname` (по умолчанию `CN=<alias>`), `builderImage` (образ с keytool, по умолчанию `mingc/android-build-box:latest`).
+**Пример использования:**
+```groovy
+withPersistentApkKey(keyDir: "${env.WORKSPACE}/../myapp-caches/signing", alias: 'myapp') {
+    sh '''
+        docker run --rm -v "$PWD/android":/app -w /app -v "$APK_KEYSTORE_DIR":/signing:ro \
+            -e APK_KEYSTORE_FILE=/signing/release.keystore -e APK_KEYSTORE_PASSWORD -e APK_KEY_ALIAS \
+            my-android-builder ./gradlew assembleRelease
+    '''
+}
+```
+
 ### `signAndroidApk`
 Выравнивает (zipalign) и подписывает (apksigner) Android APK.
 **Пример использования:**

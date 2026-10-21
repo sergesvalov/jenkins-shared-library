@@ -87,6 +87,21 @@ withApkSigningKey {
 ```
 Gradle side (`app/build.gradle.kts`): a `release` signing config reading `APK_KEYSTORE_FILE`, `APK_KEYSTORE_PASSWORD` and `APK_KEY_ALIAS` from the environment.
 
+### `withPersistentApkKey`
+Runs a block with a **persistent** Android release key (the foodplanner way): the keystore is created once and kept in a Jenkins cache directory (never in git), so every build signs with the same key and a new APK installs over the old one. Its password comes from Jenkins credentials filled from OpenBao — the library holds **only credential IDs**. Inside the block: `APK_KEYSTORE_DIR` (mount it into the build container), `APK_KEYSTORE_FILE`, `APK_KEYSTORE_PASSWORD` (also the key password), `APK_KEY_ALIAS`.
+The key: missing — created; opens with the password — used; opens only with `legacyPassword` — re-encrypted once with the password from OpenBao (the same key, a copy stays as `release.keystore.bak`, installed apps still update); opens with neither — the step fails and leaves the key alone (a new key means reinstalling the app on every phone; a person decides).
+Options: `keyDir` and `alias` (required), `passwordCredentialsId` (default `apk-sign-key`), `fallbackCredentialsId` (used when the first one is missing or empty), `legacyPassword` (the key's former password — passed by the project, never defaulted here), `dname` (default `CN=<alias>`), `builderImage` (image with keytool, default `mingc/android-build-box:latest`).
+**Usage example:**
+```groovy
+withPersistentApkKey(keyDir: "${env.WORKSPACE}/../myapp-caches/signing", alias: 'myapp') {
+    sh '''
+        docker run --rm -v "$PWD/android":/app -w /app -v "$APK_KEYSTORE_DIR":/signing:ro \
+            -e APK_KEYSTORE_FILE=/signing/release.keystore -e APK_KEYSTORE_PASSWORD -e APK_KEY_ALIAS \
+            my-android-builder ./gradlew assembleRelease
+    '''
+}
+```
+
 ### `signAndroidApk`
 Aligns (zipalign) and signs (apksigner) an Android APK. Accepts parameters as a Map.
 **Usage example:**
