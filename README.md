@@ -102,6 +102,26 @@ withPersistentApkKey(keyDir: "${env.WORKSPACE}/../myapp-caches/signing", alias: 
 }
 ```
 
+### `publishApkForUpdate`
+Publishes a signed APK for an app's self-update: writes `latest.json` next to it (`versionName`, `versionCode` = the build number, size, sha256, build time, commit) and copies both to a directory on a server over SSH — under temporary names, then renamed, so an app never sees a half-copied APK. Hosts and users are passed by the project.
+Options: `apk`, `host`, `user`, `credentialsId` (SSH key for `sshagent`), `remoteDir` (all required), `versionName` (default: from `android/app/build.gradle.kts`).
+```groovy
+publishApkForUpdate(apk: 'android/app/build/outputs/apk/release/myapp.apk',
+    host: env.PROD_SERVER_IP, user: env.DEPLOY_USER, credentialsId: env.DEPLOY_USER, remoteDir: '/opt/myapp/downloads')
+```
+
+### `changedSinceLastSuccess`
+Whether anything under a path changed since the job's last successful build (`true` on the first build). For skipping slow stages:
+```groovy
+when { expression { return params.BUILD_ANDROID || changedSinceLastSuccess('android') } }
+```
+
+### `removeRootOwnedPaths`
+Removes build output that containers left as root (which the jenkins user can't delete and the next checkout would trip over), with a small container; never fails the build.
+```groovy
+post { always { removeRootOwnedPaths(dir: 'android', paths: ['build', 'app/build', '.gradle', '.kotlin']) } }
+```
+
 ### `signAndroidApk`
 Aligns (zipalign) and signs (apksigner) an Android APK. Accepts parameters as a Map.
 **Usage example:**

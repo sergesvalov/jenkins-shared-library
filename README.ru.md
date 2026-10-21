@@ -98,6 +98,26 @@ withPersistentApkKey(keyDir: "${env.WORKSPACE}/../myapp-caches/signing", alias: 
 }
 ```
 
+### `publishApkForUpdate`
+Публикует подписанный APK для автообновления приложения: пишет рядом `latest.json` (`versionName`, `versionCode` = номер сборки, размер, sha256, время сборки, коммит) и копирует оба файла в каталог на сервере по SSH — под временными именами с последующим переименованием, так что приложение не увидит недокачанный APK. Адреса и пользователей передаёт проект.
+Параметры: `apk`, `host`, `user`, `credentialsId` (SSH-ключ для `sshagent`), `remoteDir` (все обязательные), `versionName` (по умолчанию — из `android/app/build.gradle.kts`).
+```groovy
+publishApkForUpdate(apk: 'android/app/build/outputs/apk/release/myapp.apk',
+    host: env.PROD_SERVER_IP, user: env.DEPLOY_USER, credentialsId: env.DEPLOY_USER, remoteDir: '/opt/myapp/downloads')
+```
+
+### `changedSinceLastSuccess`
+Менялось ли что-то в каталоге с последней успешной сборки джобы (`true` на первой сборке). Чтобы пропускать долгие этапы:
+```groovy
+when { expression { return params.BUILD_ANDROID || changedSinceLastSuccess('android') } }
+```
+
+### `removeRootOwnedPaths`
+Удаляет результаты сборки, оставленные контейнерами от root (их не может удалить пользователь jenkins, и на них споткнётся следующий checkout), маленьким контейнером; сборку никогда не роняет.
+```groovy
+post { always { removeRootOwnedPaths(dir: 'android', paths: ['build', 'app/build', '.gradle', '.kotlin']) } }
+```
+
 ### `signAndroidApk`
 Выравнивает (zipalign) и подписывает (apksigner) Android APK.
 **Пример использования:**
