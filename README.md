@@ -44,10 +44,17 @@ To use the library functions, add an import at the very top of your `Jenkinsfile
 ```
 
 ### `buildAndPushIfChanged`
-Builds and pushes a Docker image only if it does not already exist in the registry (checks via `docker pull`). Useful for optimizing the build of toolchain images when the Dockerfile changes rarely.
-**Usage example:**
+Builds and pushes a Docker image only if it does not already exist in the registry (checks via `docker pull`). Useful for optimizing toolchain image builds. Supports automatic SHA1 calculation of the Dockerfile when tag is omitted.
+**Usage example (named arguments, auto-computed tag):**
 ```groovy
-env.NODE_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.build | cut -c1-12', returnStdout: true).trim()
+buildAndPushIfChanged(
+    image:      env.BUILDER_IMAGE,
+    dockerfile: 'Dockerfile.android',
+    label:      'Android Builder'
+)
+```
+**Positional arguments:**
+```groovy
 buildAndPushIfChanged(env.NODE_IMAGE, env.NODE_IMAGE_TAG, 'Dockerfile.build', 'Node')
 ```
 
@@ -151,6 +158,30 @@ deployDockerCompose(
     ]
 )
 ```
+
+### `deployStaticWeb`
+Deploys static web assets (SPA, Telegram Mini App, HTML5 game, docs) to a remote server over SSH using `sshagent`.
+By default, performs a **zero-downtime atomic directory swap** using a temporary staging folder: users browsing the website never encounter partially copied or mismatched JS/CSS bundles. Stale assets and hashed chunks from prior builds are cleanly removed.
+
+**Usage example:**
+```groovy
+deployStaticWeb(
+    source:    'web/build/dist/webapp',
+    host:      env.PROD_SERVER_IP,
+    user:      env.DEPLOY_USER,
+    remoteDir: '/opt/bikes/web'
+)
+```
+
+Options:
+- `source` / `sourceDir`: local directory with built web assets (required).
+- `host`: destination server IP or hostname (required).
+- `user`: remote SSH username (required).
+- `remoteDir`: destination directory on the server (required).
+- `credentialsId`: SSH credentials ID in Jenkins (defaults to `user`).
+- `atomic`: `true` (default: atomic staging swap) or `false` (direct in-place copy).
+- `owner`: target `user:group` ownership (defaults to `${user}:${user}`).
+- `useSudo`: `true` (default) or `false` (use `sudo` for directory creation and chown).
 
 ### `buildCapacitorAndroid`
 Executes the full Android APK build cycle for Capacitor projects (Vite build, platform init, Gradle compilation, and signing). Wrapped in `withAndroidBuilder`.

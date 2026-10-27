@@ -40,10 +40,17 @@
 ```
 
 ### `buildAndPushIfChanged`
-Собирает и пушит Docker-образ только в том случае, если он еще не существует в реестре (проверка через `docker pull`). Полезно для оптимизации сборки toolchain-образов.
-**Пример использования:**
+Собирает и пушит Docker-образ только в том случае, если он еще не существует в реестре (проверка через `docker pull`). Полезно для оптимизации сборки toolchain-образов. Поддерживает автоматический подсчет SHA1-хэша Dockerfile, если тег не передан.
+**Пример использования (именованные параметры, тег вычисляется сам):**
 ```groovy
-env.NODE_IMAGE_TAG = sh(script: 'sha1sum Dockerfile.build | cut -c1-12', returnStdout: true).trim()
+buildAndPushIfChanged(
+    image:      env.BUILDER_IMAGE,
+    dockerfile: 'Dockerfile.android',
+    label:      'Android Builder'
+)
+```
+**Классический вызов:**
+```groovy
 buildAndPushIfChanged(env.NODE_IMAGE, env.NODE_IMAGE_TAG, 'Dockerfile.build', 'Node')
 ```
 
@@ -147,6 +154,30 @@ deployDockerCompose(
     ]
 )
 ```
+
+### `deployStaticWeb`
+Деплоит статический веб-сайт, SPA, Telegram Mini App или HTML5-игру на удаленный сервер по SSH через `sshagent`.
+По умолчанию выполняет **атомарное переключение каталога (zero-downtime)** через промежуточный staging-каталог: пользователи сайта никогда не увидят наполовину скопированные или неконсистентные JS/CSS бандлы. Также полностью вычищает старые неиспользуемые чанки и ассеты от предыдущих сборок.
+
+**Пример использования:**
+```groovy
+deployStaticWeb(
+    source:    'web/build/dist/webapp',
+    host:      env.PROD_SERVER_IP,
+    user:      env.DEPLOY_USER,
+    remoteDir: '/opt/bikes/web'
+)
+```
+
+Параметры:
+- `source` / `sourceDir`: локальный каталог с собранными файлами веб-приложения (обязательный).
+- `host`: IP или хостнейм целевого сервера (обязательный).
+- `user`: пользователь SSH (обязательный).
+- `remoteDir`: каталог назначения на сервере (обязательный).
+- `credentialsId`: ID SSH-ключа в Jenkins credentials (по умолчанию равен `user`).
+- `atomic`: `true` (по умолчанию: атомарный своп через staging) или `false` (прямой scp).
+- `owner`: владелец `user:group` для каталога (по умолчанию `${user}:${user}`).
+- `useSudo`: `true` (по умолчанию) или `false` (использовать `sudo` при создании каталога и смене владельца).
 
 ### `buildCapacitorAndroid`
 Выполняет полный цикл сборки Android APK для Capacitor-проектов (Vite-билд, инициализация, Gradle-компиляция и подпись). Обернуто в `withAndroidBuilder`.
