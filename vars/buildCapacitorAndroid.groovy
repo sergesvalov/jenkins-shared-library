@@ -1,9 +1,9 @@
 def call(Map config = [:]) {
     def buildScript = config.buildScript ?: 'npm run build:cap'
-    def keystore = config.keystore ?: 'keystore/release.keystore'
-    def storepass = config.storepass ?: 'password'
-    def keyalias = config.keyalias ?: 'release'
-    def keypass = config.keypass ?: 'password'
+    def keystore = config.keystore
+    def storepass = config.storepass
+    def keyalias = config.keyalias
+    def keypass = config.keypass
     def generateAssets = config.generateAssets ?: false
     // The signed APK is named after the service (pipeline-config.yaml: service_name)
     def apkName = config.apkName ?: env.SERVICE_NAME ?: 'app-release'

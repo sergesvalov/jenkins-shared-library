@@ -59,7 +59,7 @@ def call(Map args = [:], Closure body) {
 
     try {
         withCredentials(credentials) { signed() }
-    } catch (org.jenkinsci.plugins.credentialsbinding.impl.CredentialNotFoundException e) {
+    } catch (Exception e) {
         if (required) {
             error("withApkSigningKey: signing credentials not found (${e.message}). " +
                   "Check that OpenBao is unsealed and Jenkins credentials '${keystoreCredentialsId}', " +
