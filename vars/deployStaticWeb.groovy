@@ -18,7 +18,7 @@
 //   user                remote SSH user (required)
 //   remoteDir           destination directory on the remote server (required)
 //   credentialsId       SSH credentials ID for sshagent (default: user)
-//   atomic              true (default): upload to staging then swap; false: direct in-place scp
+//   atomic              true (default): upload to staging then swap; false: direct in-place upload (tar over ssh)
 //   owner               chown user:group on destination (default: "${user}:${user}")
 //   useSudo             true (default): use sudo for mkdir/chown; false: run without sudo
 def call(Map args = [:]) {
@@ -53,8 +53,9 @@ def call(Map args = [:]) {
                     ${sudoPrefix}chown -R '${owner}' '${stagingDir}'
                 "
 
-                # 2. Upload files to staging
-                scp -o StrictHostKeyChecking=no -r '${source}/.' '${user}@${host}:${stagingDir}/'
+                # 2. Upload files to staging. Through tar over ssh, not scp: OpenSSH 9+ scp goes over SFTP and refuses the
+                #    'dir/.' source ("unexpected filename: ."), while 'dir/*' would leave the hidden files behind
+                tar -C '${source}' -cf - . | ssh -o StrictHostKeyChecking=no '${user}@${host}' "tar -C '${stagingDir}' -xf -"
 
                 # 3. Atomically swap staging into place
                 ssh -o StrictHostKeyChecking=no '${user}@${host}' "
@@ -75,7 +76,7 @@ def call(Map args = [:]) {
                     ${sudoPrefix}mkdir -p '${cleanRemoteDir}'
                     ${sudoPrefix}chown -R '${owner}' '${cleanRemoteDir}'
                 "
-                scp -o StrictHostKeyChecking=no -r '${source}/.' '${user}@${host}:${cleanRemoteDir}/'
+                tar -C '${source}' -cf - . | ssh -o StrictHostKeyChecking=no '${user}@${host}' "tar -C '${cleanRemoteDir}' -xf -"
                 ssh -o StrictHostKeyChecking=no '${user}@${host}' "${sudoPrefix}chown -R '${owner}' '${cleanRemoteDir}'"
             """
         }
