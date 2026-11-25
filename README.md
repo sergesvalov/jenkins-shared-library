@@ -35,6 +35,25 @@ Pipelines rely on a number of global environment variables and credentials that 
 
 ---
 
+## Reference Jenkinsfile
+
+Full example: [`resources/Jenkinsfile.reference`](resources/Jenkinsfile.reference). A plain service with no
+steps of its own — `declarativePipeline` + `pipeline-config.yaml` (below); everything else follows this order:
+
+| Stage | What it does | Library steps |
+|---|---|---|
+| 1. Plan | what changed and which stages will run; the same `need*()` functions drive `when` | `printPlan`, `changedSinceLastSuccess` |
+| 2. Checks | lint and tests in a container, secrets present on the server — a failure here touches nothing | `checkSecretsFile` |
+| 3. Build | image to the registry | `buildAndPushIfChanged`, `buildAndPushDockerImage` |
+| 4. DB backup | `pg_dump` seconds before a deploy with migrations | `backupPostgres` |
+| 5. Deploy | docker compose on the server | `deployDockerCompose` |
+| 6. Verify | containers (running, not restarting, not unhealthy, RestartCount not growing) and health → else UNSTABLE | `verifyDeployment` |
+| 7. APK | only when `android/` changed; an APK failure does not fail the deploy | `withApkSigningKey`, `publishToApkRepo` |
+
+Every Jenkinsfile sets `timeout`, `disableConcurrentBuilds()` and `buildDiscarder` in `options`.
+New steps: `printPlan`, `checkSecretsFile`, `backupPostgres`, `verifyDeployment`, `publishToApkRepo` —
+documented in [README.ru.md](README.ru.md) and in the header comment of each `vars/*.groovy`.
+
 ## Available Functions
 
 To use the library functions, add an import at the very top of your `Jenkinsfile`:

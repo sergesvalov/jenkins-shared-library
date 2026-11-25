@@ -1,0 +1,125 @@
+// Эталонный Jenkinsfile приложения (backend в docker compose + Android-клиент).
+// Порядок шагов и приёмы — из homeservices и проектов, где они уже работают; лишнее — удалить.
+// Простой сервис без своих шагов — лучше declarativePipeline + pipeline-config.yaml (README).
+//
+//   1. План        — что изменилось и какие шаги пойдут (те же need*(), что в when)
+//   2. Проверки    — линтер, тесты, секреты на сервере; падение здесь ничего не задевает
+//   3. Сборка      — образ в registry
+//   4. Бэкап БД    — pg_dump за секунды до деплоя (миграции)
+//   5. Деплой      — docker compose на сервере
+//   6. Проверка    — контейнеры (RestartCount, healthcheck) и health-эндпоинт → иначе UNSTABLE
+//   7. APK         — только если менялся android/; сбой APK не роняет деплой
+@Library('mylib@main') _
+
+def isMain() { return !env.BRANCH_NAME || env.BRANCH_NAME == 'main' }
+def needDeploy() { return isMain() || params.FORCE_DEPLOY }
+def needApk() { return params.BUILD_ANDROID || changedSinceLastSuccess('android') }
+
+pipeline {
+    agent { label 'agent-225' }
+
+    // Обязательно для всех сборок: не висит вечно, не идёт параллельно сама с собой, не копит историю.
+    options {
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '25', artifactNumToKeepStr: '5'))
+    }
+
+    parameters {
+        booleanParam(name: 'FORCE_DEPLOY', defaultValue: false, description: 'Деплой и не из main')
+        booleanParam(name: 'BUILD_ANDROID', defaultValue: false, description: 'Собрать APK, даже если android/ не менялся')
+    }
+
+    environment {
+        APP           = 'myapp'
+        DEPLOY_SERVER = '192.168.x.x'
+        SERVER_USER   = 'deploy'                      // и id SSH-ключа в Jenkins
+        APP_DIR       = '/opt/myapp'
+        IMAGE         = "${env.REGISTRY_IP}:5050/myapp"
+        VERSION       = "1.0.${env.BUILD_NUMBER}"
+        APK_REPO_URL  = 'http://192.168.x.x:8060'
+    }
+
+    stages {
+        stage('1. План') {
+            steps {
+                printPlan(
+                    stages: [
+                        [name: '2. Проверки', run: true],
+                        [name: '4. Бэкап БД', run: needDeploy()],
+                        [name: '5. Деплой', run: needDeploy(), detail: env.DEPLOY_SERVER],
+                        [name: '7. APK', run: needApk(), detail: env.VERSION],
+                    ],
+                    description: env.VERSION
+                )
+            }
+        }
+
+        stage('2. Проверки') {
+            parallel {
+                stage('Тесты') {
+                    steps { sh 'docker run --rm -v "$PWD/backend":/app -w /app python:3.13-slim sh -c "pip install -q -r requirements-dev.txt && pytest -q"' }
+                }
+                stage('Секреты') {
+                    when { expression { needDeploy() } }
+                    steps {
+                        checkSecretsFile(host: env.DEPLOY_SERVER, user: env.SERVER_USER, path: "${env.APP_DIR}/secrets/.env",
+                                         hint: "kv/apps/${env.APP} в OpenBao + деплой homeservices --tags ${env.APP}")
+                    }
+                }
+            }
+        }
+
+        stage('3. Сборка') {
+            steps { buildAndPushDockerImage(imageName: env.IMAGE, tag: env.VERSION) }
+        }
+
+        stage('4. Бэкап БД') {
+            when { expression { needDeploy() } }
+            steps { backupPostgres(host: env.DEPLOY_SERVER, user: env.SERVER_USER, database: env.APP) }
+        }
+
+        stage('5. Деплой') {
+            when { expression { needDeploy() } }
+            steps {
+                deployDockerCompose(credentialsId: env.SERVER_USER, user: env.SERVER_USER, host: env.DEPLOY_SERVER,
+                                    dir: env.APP_DIR, composeFile: 'docker-compose.prod.yml',
+                                    envVars: [IMAGE: env.IMAGE, VERSION: env.VERSION])
+            }
+        }
+
+        stage('6. Проверка') {
+            when { expression { needDeploy() } }
+            steps {
+                verifyDeployment(host: env.DEPLOY_SERVER, user: env.SERVER_USER,
+                                 containers: ["${env.APP}-backend", "${env.APP}-frontend"],
+                                 healthUrl: "http://${env.DEPLOY_SERVER}:8080/api/health")
+            }
+        }
+
+        stage('7. APK') {
+            when { expression { needApk() } }
+            steps {
+                // Сбой сборки APK не откатывает уже выложенный backend: сборка UNSTABLE, шаг — FAILURE.
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    withApkSigningKey {
+                        sh '''
+                            docker run --rm -v "$PWD/android":/app -w /app \
+                                -v "$APK_KEYSTORE_FILE":/signing/release.keystore:ro \
+                                -e APK_KEYSTORE_FILE=/signing/release.keystore -e APK_KEYSTORE_PASSWORD -e APK_KEY_ALIAS \
+                                my-android-builder ./gradlew assembleRelease -PversionCode=$BUILD_NUMBER -PversionName=$VERSION
+                        '''
+                    }
+                    archiveArtifacts artifacts: 'android/app/build/outputs/apk/release/*.apk', fingerprint: false
+                    publishToApkRepo(apk: "android/app/build/outputs/apk/release/${env.APP}-v${env.VERSION}.apk",
+                                     appId: env.APP, title: 'My App', packageName: 'com.example.myapp',
+                                     versionName: env.VERSION)
+                }
+            }
+        }
+    }
+
+    post {
+        always { removeRootOwnedPaths(dir: 'android', paths: ['build', 'app/build', '.gradle']) }
+    }
+}

@@ -6,8 +6,13 @@ def call(Map args) {
 
     pipeline {
         agent { label "${buildAgent}" }
+        // Стандарт для всех сборок (README → «Эталонный Jenkinsfile»): сборка не висит вечно,
+        // не идёт параллельно сама с собой и не копит историю.
         options {
             skipDefaultCheckout()
+            timeout(time: 60, unit: 'MINUTES')
+            disableConcurrentBuilds()
+            buildDiscarder(logRotator(numToKeepStr: '25', artifactNumToKeepStr: '5'))
         }
         parameters {
             booleanParam(name: 'VALIDATE_ONLY', defaultValue: false, description: 'Only validate config and show generated Jenkinsfile')
@@ -118,31 +123,25 @@ def call(Map args) {
             }
 
             stage('Health Check') {
+                when {
+                    anyOf {
+                        branch 'main'
+                        expression { return userParams.FORCE_DEPLOY }
+                    }
+                }
                 steps {
                     script {
+                        // Контейнеры (запущен, не в цикле перезапусков, не unhealthy) и health-эндпоинт;
+                        // проблема — сборка UNSTABLE и хвост логов упавших контейнеров в выводе.
                         def hcUrl = config.healthcheck_url ?: (env.HOST_PORT ? "http://${env.DEPLOY_TARGET_HOST}:${env.HOST_PORT}/api/health" : null)
-                        if (hcUrl) {
-                            echo "Verifying application availability at ${hcUrl} ..."
-                            try {
-                                checkHttpEndpoint(url: hcUrl, retries: 5, sleepTime: 5)
-                            } catch (Exception e) {
-                                echo "Warning: Application at ${hcUrl} might not be ready. Error: ${e.message}"
-                            }
-                        }
-                        
-                        def containersList = env.CONTAINERS.split(' ')
-                        for (String containerName : containersList) {
-                            if (containerName.trim()) {
-                                echo "Checking logs for ${containerName}..."
-                                remoteDockerLogs(
-                                    containerName: containerName,
-                                    host: env.DEPLOY_TARGET_HOST,
-                                    user: env.SERVER_USER,
-                                    credentialsId: env.SSH_CREDS_ID,
-                                    lines: 30
-                                )
-                            }
-                        }
+                        verifyDeployment(
+                            host: env.DEPLOY_TARGET_HOST,
+                            user: env.SERVER_USER,
+                            credentialsId: env.SSH_CREDS_ID,
+                            containers: (config.containers ?: []) as List,
+                            healthUrl: hcUrl,
+                            healthCodes: (config.healthcheck_codes ?: [200]) as List
+                        )
                     }
                 }
             }

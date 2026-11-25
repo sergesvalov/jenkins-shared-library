@@ -76,7 +76,8 @@
       "type": "array",
       "items": { "type": "string" }
     },
-    "healthcheck_url": { "type": "string" }
+    "healthcheck_url": { "type": "string" },
+    "healthcheck_codes": { "type": "array", "items": { "type": "integer" } }
   },
   "additionalProperties": false
 }

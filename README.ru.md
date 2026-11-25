@@ -31,12 +31,82 @@
 
 ---
 
+## Эталонный Jenkinsfile
+
+Полный пример — [`resources/Jenkinsfile.reference`](resources/Jenkinsfile.reference). Простой сервис
+без своих шагов — `declarativePipeline` + `pipeline-config.yaml` (ниже); всё остальное строится так:
+
+| Шаг | Что делает | Шаги библиотеки |
+|---|---|---|
+| 1. План | что изменилось и какие шаги пойдут; те же функции `need*()` решают и `when` | `printPlan`, `changedSinceLastSuccess` |
+| 2. Проверки | линтер и тесты в контейнере, секреты на сервере — падение здесь ничего не задевает | `checkSecretsFile` |
+| 3. Сборка | образ в registry | `buildAndPushIfChanged`, `buildAndPushDockerImage` |
+| 4. Бэкап БД | `pg_dump` за секунды до деплоя с миграциями | `backupPostgres` |
+| 5. Деплой | docker compose на сервере | `deployDockerCompose` |
+| 6. Проверка | контейнеры (запущен, не перезапускается, не unhealthy, RestartCount не растёт) и health → иначе UNSTABLE | `verifyDeployment` |
+| 7. APK | только если менялся `android/`; сбой APK не роняет деплой | `withApkSigningKey`, `publishToApkRepo` |
+
+Обязательно в каждом Jenkinsfile:
+
+```groovy
+options {
+    timeout(time: 60, unit: 'MINUTES')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '25', artifactNumToKeepStr: '5'))
+}
+```
+
+Номера в именах шагов («1. План», «2. Проверки»…) — чтобы в Blue Ocean и логе порядок читался сразу.
+Секреты — только через credentials из OpenBao, в командах — по имени переменной окружения.
+
 ## Доступные функции
 
 В вашем `Jenkinsfile` добавьте импорт в самом начале файла, чтобы использовать функции:
 
 ```groovy
 @Library('your-library-name') _
+```
+
+### `printPlan`
+План сборки в первом шаге: что изменилось и какие шаги пойдут (`run` — то же выражение, что в `when`).
+```groovy
+printPlan(changes: ['android/ изменён'], stages: [[name: '5. Деплой', run: needDeploy(), detail: env.DEPLOY_SERVER],
+                                                 [name: '7. APK', run: needApk()]], description: env.VERSION)
+```
+
+### `checkSecretsFile`
+Падает до деплоя, если на сервере нет (или пуст) файл секретов, который отрисовывает OpenBao-агент: иначе docker
+создаст на его месте пустую папку и сервис стартует сломанным. `hint` печатается при ошибке.
+```groovy
+checkSecretsFile(host: env.DEPLOY_SERVER, user: env.SERVER_USER, path: '/opt/myapp/secrets/.env', hint: 'kv/apps/myapp в OpenBao')
+```
+
+### `backupPostgres`
+`pg_dump -Fc` перед деплоем с миграциями, хранит последние `keep` (10) дампов в `/var/backups/predeploy/<db>`.
+Без `container` — PostgreSQL хоста через `sudo -u postgres`, с `container` — `docker exec` от `POSTGRES_USER`.
+Неудачный дамп роняет сборку. Возвращает путь к дампу.
+```groovy
+backupPostgres(host: env.DB_SERVER, user: env.SERVER_USER, database: 'myapp')
+backupPostgres(host: env.DEPLOY_SERVER, user: env.SERVER_USER, database: 'myapp', container: 'myapp_db')
+```
+
+### `verifyDeployment`
+Проверка после деплоя: два замера контейнеров по SSH (запущен, не перезапускается, healthcheck не `unhealthy`,
+`starting` — ждёт; RestartCount между замерами не вырос) и HTTP-эндпоинт с таймаутом на запрос. Проблема —
+хвост логов упавших контейнеров и UNSTABLE (`failBuild: true` — FAILURE). Опции: `healthCodes` ([200]),
+`waitSeconds` (90), `intervalSeconds` (15). Возвращает список проблем.
+```groovy
+verifyDeployment(host: env.DEPLOY_SERVER, user: env.SERVER_USER, containers: ['myapp-backend'],
+                 healthUrl: "http://${env.DEPLOY_SERVER}:8080/api/health")
+```
+
+### `publishToApkRepo`
+Публикация подписанного APK в APK Repo (`POST /api/v1/apps/<appId>/upload`, токен — credential
+`apk-publish-token`): витрина, из которой приложения обновляются сами. Неудача — UNSTABLE (APK остаётся в
+артефактах), `failBuild: true` — FAILURE. `repoUrl` по умолчанию из `env.APK_REPO_URL`, `versionCode` — номер сборки.
+```groovy
+publishToApkRepo(apk: "app/build/outputs/apk/release/myapp-v${env.VERSION}.apk", appId: 'myapp',
+                 title: 'My App', packageName: 'com.example.myapp', versionName: env.VERSION)
 ```
 
 ### `buildAndPushIfChanged`
